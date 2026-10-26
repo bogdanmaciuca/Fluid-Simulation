@@ -1,7 +1,9 @@
 #include "renderer.hpp"
+#include "ui.hpp"
 
 int main() {
     RendererInitialize();
+    RendererImGui(UIDrawFrame);
 
     bool  running      = true;
     float t            = 0.0f;

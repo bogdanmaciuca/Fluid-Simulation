@@ -7,6 +7,6 @@ bool RendererInitialize();
 void RendererShutdown();
 
 void RendererUploadSpheres(std::span<const glm::vec3> positions, std::span<const glm::vec3> colors);
-void RendererImGui(std::function<void()> f);
+void RendererImGui(std::function<void(ImGuiIO&)> f);
 void RendererDrawFrame();
 

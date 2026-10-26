@@ -5,7 +5,7 @@ namespace {
     SDL_GPUDevice* s_device;
 
     ImGuiIO* s_io;
-    std::function<void()> s_imgui_func;
+    std::function<void(ImGuiIO&)> s_imgui_func;
 }
 
 bool RendererInitialize() {
@@ -66,7 +66,7 @@ void RendererUploadSpheres(std::span<const glm::vec3> positions, std::span<const
 
 }
 
-void RendererImGui(std::function<void()> f) {
+void RendererImGui(std::function<void(ImGuiIO&)> f) {
     s_imgui_func = f;
 }
 
