@@ -30,7 +30,7 @@ void main() {
     fragColor = inColor;
 
     vec4 centerClip = ubo.mvp * vec4(inPosition, 1.0);
-    float radius = 0.2;
+    float radius = 0.05;
 
     // Scale the X coordinate by the inverse aspect ratio to keep the quad square on screen
     vec2 scale = vec2(1.0 / ubo.aspectRatio, 1.0);

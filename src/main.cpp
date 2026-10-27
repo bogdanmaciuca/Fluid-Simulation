@@ -11,16 +11,53 @@ int main() {
 
     const bool* keyboard = SDL_GetKeyboardState(nullptr);
 
-    std::vector<glm::vec3> positions = {
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(1.0f, 0.0f, 0.0f),
-        glm::vec3(-1.0f, 0.0f, 0.0f),
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> colors;
+
+    const int sizeX = 200;
+    const int sizeY = 100;
+    const int sizeZ = 100;
+    const int totalPoints = sizeX * sizeY * sizeZ;
+
+    // Clear initial elements and reserve memory for optimal performance
+    positions.clear();
+    colors.clear();
+    positions.reserve(totalPoints);
+    colors.reserve(totalPoints);
+
+    auto hsvToRgb = [](float h, float s, float v) -> glm::vec3 {
+        int i = static_cast<int>(h * 6.0f);
+        float f = h * 6.0f - i;
+        float p = v * (1.0f - s);
+        float q = v * (1.0f - f * s);
+        float t = v * (1.0f - (1.0f - f) * s);
+
+        switch (i % 6) {
+            case 0: return glm::vec3(v, t, p);
+            case 1: return glm::vec3(q, v, p);
+            case 2: return glm::vec3(p, v, t);
+            case 3: return glm::vec3(p, q, v);
+            case 4: return glm::vec3(t, p, v);
+            case 5: return glm::vec3(v, p, q);
+        }
+        return glm::vec3(0.0f);
     };
-    std::vector<glm::vec3> colors = {
-        glm::vec3(1.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f),
-        glm::vec3(0.0f, 0.0f, 1.0f),
-    };
+
+    float stepSize = 0.15f;
+    for (int z = 0; z < sizeZ; ++z) {
+        for (int y = 0; y < sizeY; ++y) {
+            for (int x = 0; x < sizeX; ++x) {
+                positions.push_back(glm::vec3(
+                    x * stepSize,
+                    y * stepSize,
+                    z * stepSize
+                ));
+
+                float hue = static_cast<float>(x + y * sizeX + z * sizeX * sizeY) / totalPoints;
+                colors.push_back(hsvToRgb(hue, 1.0f, 1.0f));
+            }
+        }
+    }
 
     Camera camera;
 
