@@ -77,7 +77,7 @@ namespace {
     bool UploadSphereData(
         SDL_GPUCommandBuffer* command_buffer,
         std::span<const glm::vec3> sphere_positions,
-        std::span<const glm::vec3> sphere_colors
+        std::span<const glm::vec4> sphere_colors
     ) {
         assert(sphere_positions.size() == sphere_colors.size());
 
@@ -215,19 +215,28 @@ namespace {
             // Color
             SDL_GPUVertexBufferDescription{
                 .slot       = BUFFER_SLOT_COLORS,
-                .pitch      = sizeof(glm::vec3),
+                .pitch      = sizeof(glm::vec4),
                 .input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE,
             }
         };
 
         std::array vertex_attributes{
             SDL_GPUVertexAttribute{ .location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 }, // Position
-            SDL_GPUVertexAttribute{ .location = 1, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 }, // Color
+            SDL_GPUVertexAttribute{ .location = 1, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 0 }, // Color
         };
 
         std::array color_targets = {
             SDL_GPUColorTargetDescription{
-                .format = SDL_GetGPUSwapchainTextureFormat(s_device, s_window)
+                .format      = SDL_GetGPUSwapchainTextureFormat(s_device, s_window),
+                .blend_state = {
+                    .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
+                    .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
+                    .color_blend_op        = SDL_GPU_BLENDOP_ADD,
+                    .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO,
+                    .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
+                    .alpha_blend_op        = SDL_GPU_BLENDOP_ADD,
+                    .enable_blend          = true,
+                }
             }
         };
 
@@ -244,7 +253,7 @@ namespace {
             .depth_stencil_state = {
                 .compare_op          = SDL_GPU_COMPAREOP_LESS,
                 .enable_depth_test   = true,
-                .enable_depth_write  = true,
+                .enable_depth_write  = false,
                 .enable_stencil_test = false
             },
             .target_info = {
@@ -347,7 +356,7 @@ void RendererImGui(std::function<void(ImGuiIO&)> f) {
 
 void RendererDrawFrame(
     std::span<const glm::vec3> sphere_positions,
-    std::span<const glm::vec3> sphere_colors
+    std::span<const glm::vec4> sphere_colors
 ) {
     // ImGui
     ImGui_ImplSDLGPU3_NewFrame();

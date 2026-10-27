@@ -12,7 +12,7 @@ int main() {
     const bool* keyboard = SDL_GetKeyboardState(nullptr);
 
     std::vector<glm::vec3> positions;
-    std::vector<glm::vec3> colors;
+    std::vector<glm::vec4> colors;
 
     const int sizeX = 200;
     const int sizeY = 100;
@@ -54,7 +54,7 @@ int main() {
                 ));
 
                 float hue = static_cast<float>(x + y * sizeX + z * sizeX * sizeY) / totalPoints;
-                colors.push_back(hsvToRgb(hue, 1.0f, 1.0f));
+                colors.push_back(glm::vec4(hsvToRgb(hue, 1.0f, 1.0f), 0.05f));
             }
         }
     }
