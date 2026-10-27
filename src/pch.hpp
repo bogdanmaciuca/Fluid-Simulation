@@ -3,6 +3,7 @@
 #include <chrono>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -18,4 +19,5 @@
 #include "glslang/SPIRV/GlslangToSpv.h"
 
 #include "glm/glm.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 

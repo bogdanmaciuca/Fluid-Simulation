@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.15)
 project(Fluids LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -63,6 +63,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     SDL3::SDL3
     glm::glm
     glslang::glslang
+    glslang::glslang-default-resource-limits
     glslang::SPIRV
 )
 
