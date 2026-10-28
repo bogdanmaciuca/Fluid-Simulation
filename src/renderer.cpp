@@ -1,4 +1,5 @@
 #include "renderer.hpp"
+#include "ui.hpp"
 
 constexpr const char* SPHERES_VERTEX_SHADER_PATH   = "shaders/spheres.vert";
 constexpr const char* SPHERES_FRAGMENT_SHADER_PATH = "shaders/spheres.frag";
@@ -539,7 +540,7 @@ void RendererDrawFrame(
     // Box
     SDL_BindGPUGraphicsPipeline(render_pass, s_box_pipeline);
     PerFrameUBOBox box_ubo = {
-        .view_proj         = projection * s_view,
+        .view_proj         = projection * s_view * glm::scale(glm::mat4(1), g_ui.box_size),
         .screen_resolution = glm::vec2(swapchain_texture_width, swapchain_texture_height),
         .line_width        = 4.0f,
     };
