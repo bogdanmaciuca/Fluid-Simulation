@@ -1,7 +1,11 @@
 #include "renderer.hpp"
+#include "ui.hpp"
 
-constexpr const char* VERTEX_SHADER_PATH   = "shaders/spheres.vert";
-constexpr const char* FRAGMENT_SHADER_PATH = "shaders/spheres.frag";
+constexpr const char* SPHERES_VERTEX_SHADER_PATH   = "shaders/spheres.vert";
+constexpr const char* SPHERES_FRAGMENT_SHADER_PATH = "shaders/spheres.frag";
+
+constexpr const char* BOX_VERTEX_SHADER_PATH   = "shaders/box.vert";
+constexpr const char* BOX_FRAGMENT_SHADER_PATH = "shaders/box.frag";
 
 constexpr uint32_t BUFFER_SLOT_POSITIONS = 0;
 constexpr uint32_t BUFFER_SLOT_COLORS    = 1;
@@ -9,7 +13,8 @@ constexpr uint32_t BUFFER_SLOT_COLORS    = 1;
 namespace {
     SDL_Window*              s_window;
     SDL_GPUDevice*           s_device;
-    SDL_GPUGraphicsPipeline* s_pipeline;
+    SDL_GPUGraphicsPipeline* s_spheres_pipeline;
+    SDL_GPUGraphicsPipeline* s_box_pipeline;
     SDL_GPUTexture*          s_depth_texture;
 
     SDL_GPUTransferBuffer*   s_transfer_buffer;
@@ -20,14 +25,20 @@ namespace {
     size_t                   s_sphere_buffers_size;
     size_t                   s_spheres_num;
 
-    ImGuiIO*                      s_io;
-    std::function<void(ImGuiIO&)> s_imgui_func;
+    ImGuiIO*                 s_io;
+    std::function<void()>    s_imgui_func;
 
-    struct PerFrameUBO {
+    struct PerFrameUBOSpheres {
         glm::mat4 view_proj;
         float     aspect_ratio;
     };
     glm::mat4 s_view = glm::mat4(1);
+
+    struct PerFrameUBOBox {
+        glm::mat4 view_proj;
+        glm::vec2 screen_resolution;
+        float     line_width;
+    };
 
     bool EnsureTransferBufferSize(size_t requested_size) {
         if (requested_size > s_transfer_buffer_size) {
@@ -80,6 +91,9 @@ namespace {
         std::span<const glm::vec3> sphere_colors
     ) {
         assert(sphere_positions.size() == sphere_colors.size());
+        if(sphere_positions.empty()) {
+            return true;
+        }
 
         // Ensure GPU buffer sizes
         if (!EnsureTransferBufferSize(sphere_positions.size_bytes() + sphere_colors.size_bytes())) return false;
@@ -163,10 +177,10 @@ namespace {
         return true;
     }
 
-    bool InitializePipeline() {
+    bool InitializeSpheresPipeline() {
         // Vertex shader
         std::vector<uint32_t> vertex_shader_spirv;
-        if (!CompileShader(VERTEX_SHADER_PATH, EShLangVertex, vertex_shader_spirv)) return false;
+        if (!CompileShader(SPHERES_VERTEX_SHADER_PATH, EShLangVertex, vertex_shader_spirv)) return false;
         SDL_GPUShaderCreateInfo vertex_shader_create_info = {
             .code_size            = vertex_shader_spirv.size() * sizeof(uint32_t),
             .code                 = reinterpret_cast<const uint8_t*>(vertex_shader_spirv.data()),
@@ -186,7 +200,7 @@ namespace {
 
         // Fragment shader
         std::vector<uint32_t> fragment_shader_spirv;
-        if (!CompileShader(FRAGMENT_SHADER_PATH, EShLangFragment, fragment_shader_spirv)) return false;
+        if (!CompileShader(SPHERES_FRAGMENT_SHADER_PATH, EShLangFragment, fragment_shader_spirv)) return false;
         SDL_GPUShaderCreateInfo fragment_shader_create_info = {
             .code_size            = fragment_shader_spirv.size() * sizeof(uint32_t),
             .code                 = reinterpret_cast<const uint8_t*>(fragment_shader_spirv.data()),
@@ -254,14 +268,90 @@ namespace {
                 .has_depth_stencil_target = true,
             }
         };
-        s_pipeline = SDL_CreateGPUGraphicsPipeline(s_device, &create_info);
-        if (!s_pipeline) {
+        s_spheres_pipeline = SDL_CreateGPUGraphicsPipeline(s_device, &create_info);
+        if (!s_spheres_pipeline) {
             SDL_Log("Failed to create GPU graphics pipeline for spheres: %s", SDL_GetError());
             return false;
         }
 
         SDL_ReleaseGPUShader(s_device, vertex_shader);
         SDL_ReleaseGPUShader(s_device, fragment_shader);
+        return true;
+    }
+
+    bool InitializeBoxPipeline() {
+        // Vertex shader
+        std::vector<uint32_t> vertex_shader_spirv;
+        if (!CompileShader(BOX_VERTEX_SHADER_PATH, EShLangVertex, vertex_shader_spirv)) return false;
+        SDL_GPUShaderCreateInfo vertex_shader_create_info = {
+            .code_size            = vertex_shader_spirv.size() * sizeof(uint32_t),
+            .code                 = reinterpret_cast<const uint8_t*>(vertex_shader_spirv.data()),
+            .entrypoint           = "main",
+            .format               = SDL_GPU_SHADERFORMAT_SPIRV,
+            .stage                = SDL_GPU_SHADERSTAGE_VERTEX,
+            .num_samplers         = 0,
+            .num_storage_textures = 0,
+            .num_storage_buffers  = 0,
+            .num_uniform_buffers  = 1,
+        };
+        SDL_GPUShader* vertex_shader = SDL_CreateGPUShader(s_device, &vertex_shader_create_info);
+        if (!vertex_shader) {
+            SDL_Log("Failed to create vertex shader: %s", SDL_GetError());
+            return false;
+        }
+
+        // Fragment shader
+        std::vector<uint32_t> fragment_shader_spirv;
+        if (!CompileShader(BOX_FRAGMENT_SHADER_PATH, EShLangFragment, fragment_shader_spirv)) return false;
+        SDL_GPUShaderCreateInfo fragment_shader_create_info = {
+            .code_size            = fragment_shader_spirv.size() * sizeof(uint32_t),
+            .code                 = reinterpret_cast<const uint8_t*>(fragment_shader_spirv.data()),
+            .entrypoint           = "main",
+            .format               = SDL_GPU_SHADERFORMAT_SPIRV,
+            .stage                = SDL_GPU_SHADERSTAGE_FRAGMENT,
+            .num_samplers         = 0,
+            .num_storage_textures = 0,
+            .num_storage_buffers  = 0,
+            .num_uniform_buffers  = 1,
+        };
+        SDL_GPUShader* fragment_shader = SDL_CreateGPUShader(s_device, &fragment_shader_create_info);
+        if (!fragment_shader) {
+            SDL_Log("Failed to create fragment shader: %s", SDL_GetError());
+            return false;
+        }
+
+        std::array color_targets = {
+            SDL_GPUColorTargetDescription{
+                .format = SDL_GetGPUSwapchainTextureFormat(s_device, s_window)
+            }
+        };
+
+        SDL_GPUGraphicsPipelineCreateInfo create_info = {
+            .vertex_shader = vertex_shader,
+            .fragment_shader = fragment_shader,
+            .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+            .depth_stencil_state = {
+                .compare_op          = SDL_GPU_COMPAREOP_LESS,
+                .enable_depth_test   = true,
+                .enable_depth_write  = true,
+                .enable_stencil_test = false
+            },
+            .target_info = {
+                .color_target_descriptions = color_targets.data(),
+                .num_color_targets        = color_targets.size(),
+                .depth_stencil_format     = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+                .has_depth_stencil_target = true,
+            }
+        };
+        s_box_pipeline = SDL_CreateGPUGraphicsPipeline(s_device, &create_info);
+        if (!s_spheres_pipeline) {
+            SDL_Log("Failed to create GPU graphics pipeline for box: %s", SDL_GetError());
+            return false;
+        }
+
+        SDL_ReleaseGPUShader(s_device, vertex_shader);
+        SDL_ReleaseGPUShader(s_device, fragment_shader);
+
         return true;
     }
 }
@@ -308,8 +398,11 @@ bool RendererInitialize() {
     // GLSLang
     glslang::InitializeProcess();
 
-    // Pipeline
-    if (!InitializePipeline()) {
+    // Pipelines
+    if (!InitializeSpheresPipeline()) {
+        return false;
+    }
+    if (!InitializeBoxPipeline()) {
         return false;
     }
 
@@ -319,7 +412,8 @@ bool RendererInitialize() {
 void RendererShutdown() {
     glslang::FinalizeProcess();
 
-    SDL_ReleaseGPUGraphicsPipeline(s_device, s_pipeline);
+    SDL_ReleaseGPUGraphicsPipeline(s_device, s_box_pipeline);
+    SDL_ReleaseGPUGraphicsPipeline(s_device, s_spheres_pipeline);
     SDL_ReleaseGPUTexture(s_device, s_depth_texture);
     SDL_ReleaseGPUBuffer(s_device, s_sphere_positions);
     SDL_ReleaseGPUBuffer(s_device, s_sphere_colors);
@@ -341,11 +435,12 @@ void RendererSetViewMatrix(const glm::mat4& view) {
     s_view = view;
 }
 
-void RendererImGui(std::function<void(ImGuiIO&)> f) {
+void RendererImGui(std::function<void()> f) {
     s_imgui_func = f;
 }
 
 void RendererDrawFrame(
+    float box_width, float box_height,
     std::span<const glm::vec3> sphere_positions,
     std::span<const glm::vec3> sphere_colors
 ) {
@@ -354,7 +449,7 @@ void RendererDrawFrame(
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
-    s_imgui_func(*s_io);
+    s_imgui_func();
 
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
@@ -400,7 +495,7 @@ void RendererDrawFrame(
 
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, command_buffer);
 
-    // Spheres render pass
+    // Spheres & box render pass
     SDL_GPUColorTargetInfo swapchain_color_target = {
         .texture     = swapchain_texture,
         .clear_color = SDL_FColor{0.2f, 0.4f, 0.6f, 1.0f},
@@ -426,21 +521,34 @@ void RendererDrawFrame(
     );
 
     glm::mat4 projection = glm::perspective(glm::radians(80.0f), (float)swapchain_texture_width / (float)swapchain_texture_height, 0.1f, 100.0f);
-    PerFrameUBO ubo = {
+    PerFrameUBOSpheres ubo = {
         .view_proj    = projection * s_view,
         .aspect_ratio = (float)swapchain_texture_width / (float)swapchain_texture_height
     };
-    SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(PerFrameUBO));
+    SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(PerFrameUBOSpheres));
 
-    std::array buffer_bindings{
-        SDL_GPUBufferBinding{ .buffer = s_sphere_positions, .offset = 0 },
-        SDL_GPUBufferBinding{ .buffer = s_sphere_colors,    .offset = 0 },
-    };
+    // Spheres
     if (s_spheres_num) {
-        SDL_BindGPUGraphicsPipeline(render_pass, s_pipeline);
+        std::array buffer_bindings{
+            SDL_GPUBufferBinding{ .buffer = s_sphere_positions, .offset = 0 },
+            SDL_GPUBufferBinding{ .buffer = s_sphere_colors,    .offset = 0 },
+        };
+        SDL_BindGPUGraphicsPipeline(render_pass, s_spheres_pipeline);
         SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings.data(), buffer_bindings.size());
         SDL_DrawGPUPrimitives(render_pass, 6, s_spheres_num, 0, 0);
     }
+    // Box
+    SDL_BindGPUGraphicsPipeline(render_pass, s_box_pipeline);
+    PerFrameUBOBox box_ubo = {
+        .view_proj         = projection * s_view * glm::scale(glm::mat4(1), g_ui.box_size),
+        .screen_resolution = glm::vec2(swapchain_texture_width, swapchain_texture_height),
+        .line_width        = 4.0f,
+    };
+    SDL_PushGPUVertexUniformData(command_buffer, 0, &box_ubo, sizeof(box_ubo));
+    glm::vec3 box_color(1.0f);
+    SDL_PushGPUFragmentUniformData(command_buffer, 0, &box_color, sizeof(box_color));
+    SDL_DrawGPUPrimitives(render_pass, 6, 12, 0, 0);
+
     SDL_EndGPURenderPass(render_pass);
 
     // ImGui Render pass
