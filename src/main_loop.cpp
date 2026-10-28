@@ -1,4 +1,5 @@
 #include "main_loop.hpp"
+#include "ui.hpp"
 
 void MainLoop(UpdateFunc variable_update, UpdateFunc fixed_update) {
     bool  running      = true;
@@ -22,8 +23,8 @@ void MainLoop(UpdateFunc variable_update, UpdateFunc fixed_update) {
             }
         }
 
-        accumulator += frame_time;
-        while (accumulator >= dt) {
+        accumulator += frame_time * g_ui.speed;
+        while (accumulator >= dt ) {
             fixed_update(dt);
             accumulator -= dt;
         }

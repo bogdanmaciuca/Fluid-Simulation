@@ -11,6 +11,8 @@ int main() {
 
     const bool* keyboard = SDL_GetKeyboardState(nullptr);
 
+    float box_width = 10.0f, box_height = 10.0f;
+
     std::vector<glm::vec3> positions;
     std::vector<glm::vec3> colors;
 
@@ -76,7 +78,8 @@ int main() {
         else if (keyboard[SDL_SCANCODE_D]) { camera.ProcessKeyboard(CameraMovement::Right,    delta_time); }
 
         RendererSetViewMatrix(camera.GetViewMatrix());
-        RendererDrawFrame(positions, colors);
+        // RendererDrawFrame(box_width, box_height, positions, colors);
+        RendererDrawFrame(box_width, box_height, {}, {});
     };
 
     const auto fixed_update = [&](float timestep) {
