@@ -17,6 +17,9 @@ void UIDrawFrame() {
     SliderAsMilli("Speed", &g_ui.speed, 0.01f, 2.0f);
     SliderAsMilli("Particle separation (mm)", &g_ui.particle_separation, 5.0f, 50.0f);
     ImGui::SliderFloat3("Box size (m)", &g_ui.box_size.x, 0.25f, 5.0f);
+    ImGui::SliderFloat("Gravity (m^2/s)", &g_ui.gravity, -50.0f, 50.0f);
+    ImGui::SliderFloat("Density (kg/m)", &g_ui.density, 1.0f, 10000.0f);
+    ImGui::SliderFloat("PIC/FLIP", &g_ui.pic_flip, 0.0f, 1.0f);
     ImGui::End();
 }
 
