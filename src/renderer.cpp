@@ -31,6 +31,7 @@ namespace {
     struct PerFrameUBOSpheres {
         glm::mat4 view_proj;
         float     aspect_ratio;
+        float     radius;
     };
     glm::mat4 s_view = glm::mat4(1);
 
@@ -109,7 +110,7 @@ namespace {
         memcpy(static_cast<std::byte*>(mapped_mem) + sphere_positions.size_bytes(), sphere_colors.data(), sphere_colors.size_bytes());
         SDL_UnmapGPUTransferBuffer(s_device, s_transfer_buffer);
 
-        // Copy pass
+        // Record the CPU-side copy pass. Actual VRAM transfer is asynchronous.
         SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
         // Positions
         SDL_GPUTransferBufferLocation positions_source = {
@@ -440,28 +441,32 @@ void RendererImGui(std::function<void()> f) {
 }
 
 void RendererDrawFrame(
-    float box_width, float box_height,
     std::span<const glm::vec3> sphere_positions,
     std::span<const glm::vec3> sphere_colors
 ) {
-    // ImGui
-    ImGui_ImplSDLGPU3_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
+    ImDrawData* draw_data = nullptr;
 
-    s_imgui_func();
+    {
+        // ImGui
+        ImGui_ImplSDLGPU3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
 
-    ImGui::Render();
-    ImDrawData* draw_data = ImGui::GetDrawData();
+        s_imgui_func();
+
+        ImGui::Render();
+        draw_data = ImGui::GetDrawData();
+    }
+
     const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
 
     // Frame command buffer
     SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(s_device);
 
-    // Upload sphere data to GPU
+    // Upload sphere data to GPU (CPU-side work; the copy is asynchronous)
     UploadSphereData(command_buffer, sphere_positions, sphere_colors);
 
-    // Swapchain texture
+    // Swapchain texture; this can block on the previous frame / vsync.
     SDL_GPUTexture* swapchain_texture;
     static uint32_t last_swapchain_texture_width = 0, last_swapchain_texture_height = 0;
     uint32_t swapchain_texture_width, swapchain_texture_height;
@@ -470,28 +475,30 @@ void RendererDrawFrame(
     }
 
     // Resize if needed
-    if (last_swapchain_texture_height != swapchain_texture_width || last_swapchain_texture_height != swapchain_texture_height) {
-        SDL_GPUTextureCreateInfo depth_texture_create_info = {
-            .type                 = SDL_GPU_TEXTURETYPE_2D,
-            .format               = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
-            .usage                = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-            .width                = swapchain_texture_width,
-            .height               = swapchain_texture_height,
-            .layer_count_or_depth = 1,
-            .num_levels           = 1,
-            .sample_count         = SDL_GPU_SAMPLECOUNT_1,
-        };
-        auto new_depth_texture = SDL_CreateGPUTexture(s_device, &depth_texture_create_info);
-        if (!new_depth_texture) {
-            SDL_Log("Failed to create GPU texture: %s", SDL_GetError());
+    {
+        if (last_swapchain_texture_height != swapchain_texture_width || last_swapchain_texture_height != swapchain_texture_height) {
+            SDL_GPUTextureCreateInfo depth_texture_create_info = {
+                .type                 = SDL_GPU_TEXTURETYPE_2D,
+                .format               = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+                .usage                = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+                .width                = swapchain_texture_width,
+                .height               = swapchain_texture_height,
+                .layer_count_or_depth = 1,
+                .num_levels           = 1,
+                .sample_count         = SDL_GPU_SAMPLECOUNT_1,
+            };
+            auto new_depth_texture = SDL_CreateGPUTexture(s_device, &depth_texture_create_info);
+            if (!new_depth_texture) {
+                SDL_Log("Failed to create GPU texture: %s", SDL_GetError());
+            }
+            else {
+                SDL_ReleaseGPUTexture(s_device, s_depth_texture);
+                s_depth_texture = new_depth_texture;
+            }
         }
-        else {
-            SDL_ReleaseGPUTexture(s_device, s_depth_texture);
-            s_depth_texture = new_depth_texture;
-        }
+        last_swapchain_texture_width  = swapchain_texture_width;
+        last_swapchain_texture_height = swapchain_texture_height;
     }
-    last_swapchain_texture_width  = swapchain_texture_width;
-    last_swapchain_texture_height = swapchain_texture_height;
 
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, command_buffer);
 
@@ -513,43 +520,49 @@ void RendererDrawFrame(
         .stencil_store_op = SDL_GPU_STOREOP_DONT_CARE
     };
 
-    SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(
-        command_buffer,
-        color_target_infos.data(),
-        color_target_infos.size(),
-        &depth_target_info
-    );
+    SDL_GPURenderPass* render_pass = nullptr;
 
-    glm::mat4 projection = glm::perspective(glm::radians(80.0f), (float)swapchain_texture_width / (float)swapchain_texture_height, 0.1f, 100.0f);
-    PerFrameUBOSpheres ubo = {
-        .view_proj    = projection * s_view,
-        .aspect_ratio = (float)swapchain_texture_width / (float)swapchain_texture_height
-    };
-    SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(PerFrameUBOSpheres));
+    {
 
-    // Spheres
-    if (s_spheres_num) {
-        std::array buffer_bindings{
-            SDL_GPUBufferBinding{ .buffer = s_sphere_positions, .offset = 0 },
-            SDL_GPUBufferBinding{ .buffer = s_sphere_colors,    .offset = 0 },
+        render_pass = SDL_BeginGPURenderPass(
+            command_buffer,
+            color_target_infos.data(),
+            color_target_infos.size(),
+            &depth_target_info
+        );
+
+        glm::mat4 projection = glm::perspective(glm::radians(80.0f), (float)swapchain_texture_width / (float)swapchain_texture_height, 0.1f, 100.0f);
+        PerFrameUBOSpheres ubo = {
+            .view_proj    = projection * s_view,
+            .aspect_ratio = (float)swapchain_texture_width / (float)swapchain_texture_height,
+            .radius       = g_ui.particle_radius,
         };
-        SDL_BindGPUGraphicsPipeline(render_pass, s_spheres_pipeline);
-        SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings.data(), buffer_bindings.size());
-        SDL_DrawGPUPrimitives(render_pass, 6, s_spheres_num, 0, 0);
-    }
-    // Box
-    SDL_BindGPUGraphicsPipeline(render_pass, s_box_pipeline);
-    PerFrameUBOBox box_ubo = {
-        .view_proj         = projection * s_view * glm::scale(glm::mat4(1), g_ui.box_size),
-        .screen_resolution = glm::vec2(swapchain_texture_width, swapchain_texture_height),
-        .line_width        = 4.0f,
-    };
-    SDL_PushGPUVertexUniformData(command_buffer, 0, &box_ubo, sizeof(box_ubo));
-    glm::vec3 box_color(1.0f);
-    SDL_PushGPUFragmentUniformData(command_buffer, 0, &box_color, sizeof(box_color));
-    SDL_DrawGPUPrimitives(render_pass, 6, 12, 0, 0);
+        SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(PerFrameUBOSpheres));
 
-    SDL_EndGPURenderPass(render_pass);
+        // Spheres
+        if (s_spheres_num) {
+            std::array buffer_bindings{
+                SDL_GPUBufferBinding{ .buffer = s_sphere_positions, .offset = 0 },
+                SDL_GPUBufferBinding{ .buffer = s_sphere_colors,    .offset = 0 },
+            };
+            SDL_BindGPUGraphicsPipeline(render_pass, s_spheres_pipeline);
+            SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings.data(), buffer_bindings.size());
+            SDL_DrawGPUPrimitives(render_pass, 6, s_spheres_num, 0, 0);
+        }
+        // Box
+        SDL_BindGPUGraphicsPipeline(render_pass, s_box_pipeline);
+        PerFrameUBOBox box_ubo = {
+            .view_proj         = projection * s_view * glm::translate(glm::mat4(1), g_ui.box_size/2.0f) * glm::scale(glm::mat4(1), g_ui.box_size),
+            .screen_resolution = glm::vec2(swapchain_texture_width, swapchain_texture_height),
+            .line_width        = 4.0f,
+        };
+        SDL_PushGPUVertexUniformData(command_buffer, 0, &box_ubo, sizeof(box_ubo));
+        glm::vec3 box_color(1.0f);
+        SDL_PushGPUFragmentUniformData(command_buffer, 0, &box_color, sizeof(box_color));
+        SDL_DrawGPUPrimitives(render_pass, 6, 12, 0, 0);
+
+        SDL_EndGPURenderPass(render_pass);
+    }
 
     // ImGui Render pass
     color_target_infos[0].load_op = SDL_GPU_LOADOP_LOAD;
