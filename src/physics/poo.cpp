@@ -4,7 +4,7 @@
 #include <tuple>
 #include <vector>
 
-std::tuple<std::vector<int>> grid;
+std::tuple<std::vector<int>, std::vector<int>> grid;
 
 std::vector<int> cel_first_particle;
 std::vector<int> cel_particle_ids;
