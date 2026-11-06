@@ -22,7 +22,7 @@ float Poly6Kernel(float r2){
         return 0.0f;
     }
 
-    return 4.0 / (3 * density_area) * diff * diff *diff;
+    return 315.0f / (64.0f * 3.0f * std::pow(density_area,9)) * diff * diff * diff;
 }
 
 float TaitEquation(float rest_density, float exponent, float stiffness, float density){

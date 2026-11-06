@@ -17,6 +17,8 @@ namespace dod
     float density_area;
     float da2;
 
+    float g = 9.82;
+
     std::vector<float> x;
     std::vector<float> y;
     std::vector<float> z;
@@ -36,7 +38,7 @@ namespace dod
                 return 0.0f;
             }
 
-            return 4.0f / (3.0f * density_area) * diff * diff * diff;
+            return 315.0f / (64.0f * 3.0f * std::pow(density_area,9)) * diff * diff * diff;
         }
 
         float TaitEquation(float rest_density, float exponent, float stiffness, float particle_density) {
