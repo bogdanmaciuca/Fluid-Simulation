@@ -15,8 +15,8 @@ float density_area;
 float da2; // precalculation for density_area^2
 
 
-float Poly6Kernel(float r){
-    float diff = da2 - r;
+float Poly6Kernel(float r2){
+    float diff = da2 - r2;
 
     if (diff <= 0.0f){
         return 0.0f;

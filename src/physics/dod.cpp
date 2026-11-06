@@ -29,8 +29,8 @@ namespace dod
 
     namespace {
 
-        float Poly6Kernel(float r) {
-            const float diff = da2 - r;
+        float Poly6Kernel(float r2) {
+            const float diff = da2 - r2;
             if (diff <= 0.0f)
             {
                 return 0.0f;
