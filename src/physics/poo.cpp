@@ -255,12 +255,12 @@ class Liquid: public Particle{
     }
 };
 
-std::vector<Liquid*> particles;
+std::vector<Liquid> particles;
 
 void Liquid::CalcCellDensity(int cell_start, int cell_end){ // Calc stands for Calculate
     for (int i = cell_start; i < cell_end; i++){
-        Liquid* I = particles[cel_particle_ids[i]];
-        float xi = I->GetX(), yi = I->GetY(), zi = I->GetZ();
+        Liquid& I = particles[cel_particle_ids[i]];
+        float xi = I.GetX(), yi = I.GetY(), zi = I.GetZ();
 
         //from coordonates to distances
         xi = xi - x;
@@ -272,14 +272,14 @@ void Liquid::CalcCellDensity(int cell_start, int cell_end){ // Calc stands for C
         float density_impact = Poly6Kernel(range);
 
         density += density_impact;
-        I->IncreaseDensity(density_impact);
+        I.IncreaseDensity(density_impact);
     }
 }
 
 void Liquid::CalcCellForce(int cell_start, int cell_end){
     for (int i = cell_start; i < cell_end; i++){
-        Particle* I = particles[cel_particle_ids[i]];
-        float xi = I->GetX(), yi = I->GetY(), zi = I->GetZ();
+        Liquid& I = particles[cel_particle_ids[i]];
+        float xi = I.GetX(), yi = I.GetY(), zi = I.GetZ();
 
         //from coordonates to distances
         xi = xi - x;
@@ -288,10 +288,10 @@ void Liquid::CalcCellForce(int cell_start, int cell_end){
         
         float range = std::sqrt(xi * xi + yi * yi + zi * zi);
 
-        glm::vec3 force_impact = I->GetM() * (presure + static_cast<Liquid*>(I)->GetPresure()) / (2 * static_cast<Liquid*>(I)->GetDensity()) * SpikyGradient(glm::vec3(xi, yi, zi), range);
+        glm::vec3 force_impact = I.GetM() * (presure + I.GetPresure()) / (2 * I.GetDensity()) * SpikyGradient(glm::vec3(xi, yi, zi), range);
 
         force += force_impact;
-        static_cast<Liquid*>(I)->IncreaseForce(-force_impact);
+        I.IncreaseForce(-force_impact);
     }
 }
 
@@ -301,6 +301,7 @@ class LiquidFactory{
     float default_x, default_y, default_z;
 
     public:
+    LiquidFactory(){}
     LiquidFactory(float x, float y, float z):default_x(x), default_y(y), default_z(z){}
 
     Liquid CreateLiquidParticleBegine(){
@@ -335,7 +336,7 @@ void PhysicsUpdate(){
     cel_particle_ids = std::get<1>(grid);
 
     for(int i : cel_particle_ids){
-        particles[i]->CalcForce(i);
+        particles[i].CalcForce(i);
     }
 }
 
@@ -350,10 +351,10 @@ void PhysicsInit(){
     liquid_factory = LiquidFactory(cell_size * grid_size / 2, cell_size * grid_size * 3 / 4, cell_size * grid_size / 2);
 
     for(int i = 0; i < particle_count; i++){
-        particles.push_back(&liquid_factory.CreateLiquidParticleBegine());
+        particles.push_back(liquid_factory.CreateLiquidParticleBegine());
     }
 }
 
 void IncreaseParticles(){
-    particles.push_back(&liquid_factory.CreateLiquidParticle());
+    particles.push_back(liquid_factory.CreateLiquidParticle());
 }
