@@ -11,9 +11,12 @@ std::vector<int> cel_particle_ids;
 
 int grid_size;
 int cell_size;
+int particle_count;
 float density_area;
 float da2; // precalculation for density_area^2
+glm::vec3 gravity(0.0, -9.81, 0.0);
 
+// Pi = 3 btw
 
 float Poly6Kernel(float r2){
     float diff = da2 - r2;
@@ -81,8 +84,6 @@ class Particle{
     }
 };
 
-std::vector<Particle*> particles;
-
 class Liquid: public Particle{
     private:
 
@@ -97,43 +98,9 @@ class Liquid: public Particle{
         force = glm::vec3(0.0f);
     }
 
-    void CalcCellDensity(int cell_start, int cell_end){
-        for (int i = cell_start; i < cell_end; i++){
-            Particle* I = particles[cel_particle_ids[i]];
-            float xi = I->GetX(), yi = I->GetY(), zi = I->GetZ();
+    void CalcCellDensity(int cell_start, int cell_end);
 
-            //from coordonates to distances
-            xi = xi - x;
-            yi = yi - y;
-            zi = zi - z;
-            
-            float range = xi * xi + yi * yi + zi * zi;
-
-            float density_impact = Poly6Kernel(range);
-
-            density += density_impact;
-            static_cast<Liquid*>(I)->IncreaseDensity(density_impact);
-        }
-    }
-
-    void CalcCellForce(int cell_start, int cell_end){
-        for (int i = cell_start; i < cell_end; i++){
-            Particle* I = particles[cel_particle_ids[i]];
-            float xi = I->GetX(), yi = I->GetY(), zi = I->GetZ();
-
-            //from coordonates to distances
-            xi = xi - x;
-            yi = yi - y;
-            zi = zi - z;
-            
-            float range = std::sqrt(xi * xi + yi * yi + zi * zi);
-
-            glm::vec3 force_impact = I->GetM() * (presure + static_cast<Liquid*>(I)->GetPresure()) / (2 * static_cast<Liquid*>(I)->GetDensity()) * SpikyGradient(glm::vec3(xi, yi, zi), range);
-
-            force += force_impact;
-            static_cast<Liquid*>(I)->IncreaseForce(-force_impact);
-        }
-    }
+    void CalcCellForce(int cell_start, int cell_end);
 
     void CalcForce(int part_position){
         int x_cell_coordinate = floor(x / cell_size), y_cell_coordinate = floor(y / cell_size),
@@ -251,6 +218,8 @@ class Liquid: public Particle{
 
             CalcCellForce(cell_start, cell_end);
         }
+
+        force += gravity;
     }
 
     void IncreaseDensity(float d){
@@ -286,20 +255,105 @@ class Liquid: public Particle{
     }
 };
 
-class LiquidFactory{
+std::vector<Liquid*> particles;
 
+void Liquid::CalcCellDensity(int cell_start, int cell_end){ // Calc stands for Calculate
+    for (int i = cell_start; i < cell_end; i++){
+        Liquid* I = particles[cel_particle_ids[i]];
+        float xi = I->GetX(), yi = I->GetY(), zi = I->GetZ();
+
+        //from coordonates to distances
+        xi = xi - x;
+        yi = yi - y;
+        zi = zi - z;
+        
+        float range = xi * xi + yi * yi + zi * zi;
+
+        float density_impact = Poly6Kernel(range);
+
+        density += density_impact;
+        I->IncreaseDensity(density_impact);
+    }
+}
+
+void Liquid::CalcCellForce(int cell_start, int cell_end){
+    for (int i = cell_start; i < cell_end; i++){
+        Particle* I = particles[cel_particle_ids[i]];
+        float xi = I->GetX(), yi = I->GetY(), zi = I->GetZ();
+
+        //from coordonates to distances
+        xi = xi - x;
+        yi = yi - y;
+        zi = zi - z;
+        
+        float range = std::sqrt(xi * xi + yi * yi + zi * zi);
+
+        glm::vec3 force_impact = I->GetM() * (presure + static_cast<Liquid*>(I)->GetPresure()) / (2 * static_cast<Liquid*>(I)->GetDensity()) * SpikyGradient(glm::vec3(xi, yi, zi), range);
+
+        force += force_impact;
+        static_cast<Liquid*>(I)->IncreaseForce(-force_impact);
+    }
+}
+
+class LiquidFactory{
+    private:
+    float last_x = 1.0, last_y = 1.0, last_z = 1.0;
+    float default_x, default_y, default_z;
+
+    public:
+    LiquidFactory(float x, float y, float z):default_x(x), default_y(y), default_z(z){}
+
+    Liquid CreateLiquidParticleBegine(){
+        if (last_x < grid_size * cell_size){
+            last_x++;
+        }
+        else if(last_y < grid_size * cell_size){
+            last_x = 1.0;
+            last_y++;
+        }
+        else if(last_y < grid_size * cell_size){
+            last_x = 1.0;
+            last_y = 1.0;
+            last_z++;
+        }
+        return Liquid(last_x, last_y, last_z, 1.0);
+    }
+
+    Liquid CreateLiquidParticle(){
+        return Liquid(default_x, default_y, default_z, 1.0);
+    }
 };
+
+
+
+LiquidFactory liquid_factory;
 
 void PhysicsUpdate(){
     // grid = create_grid();
 
     cel_first_particle = std::get<0>(grid);
     cel_particle_ids = std::get<1>(grid);
+
+    for(int i : cel_particle_ids){
+        particles[i]->CalcForce(i);
+    }
 }
 
 void PhysicsInit(){
     grid_size = std::cbrt(cel_first_particle.size());
-    cell_size = 15; //wip
-    density_area = 15; //wip
+    cell_size = 2; //wip
+    density_area = 2; //wip
     da2 = density_area * density_area;
+
+
+
+    liquid_factory = LiquidFactory(cell_size * grid_size / 2, cell_size * grid_size * 3 / 4, cell_size * grid_size / 2);
+
+    for(int i = 0; i < particle_count; i++){
+        particles.push_back(&liquid_factory.CreateLiquidParticleBegine());
+    }
+}
+
+void IncreaseParticles(){
+    particles.push_back(&liquid_factory.CreateLiquidParticle());
 }
