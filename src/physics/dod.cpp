@@ -14,10 +14,11 @@ namespace dod
 
     int grid_size;
     int cell_size;
+    int particle_count;
     float density_area;
     float da2;
 
-    float g = 9.82;
+    glm::vec3 g = glm::vec3(0.0,-9.81,0.0);
 
     std::vector<float> x;
     std::vector<float> y;
@@ -56,7 +57,7 @@ namespace dod
             return r_vec * coef;
         }
 
-        void CalcCellDensity(int particle, int cell_start, int cell_end) {
+        void CalcCellDensity(int particle, int cell_start, int cell_end) { //what does calc stand for? 
             for (int i = cell_start; i < cell_end; ++i)
             {
                 int neighbor = cell_particle_ids[i];
@@ -208,22 +209,70 @@ namespace dod
                 cell_end = cell_first_particle[cell - grid_size * grid_size - grid_size];
                 CalcCellForce(particle_position, cell_start, cell_end);
             }
+
+            force[particle_position] += g;
         }
 
     } 
+
+
+    float last_x = 1.0; 
+    float last_y = 1.0; 
+    float last_z = 1.0;
+
+    float default_x, default_y, default_z;
+
+    void CreateLiquidParticlesBegine(){
+        if (last_x < grid_size * cell_size){
+            last_x++;
+        }
+        else if (last_y < grid_size * cell_size) {
+            last_x = 1.0;
+            last_y++;
+        }
+        else if (last_z < grid_size * cell_size) {
+            last_y = 1.0;
+            last_z++;
+        }
+
+        x.push_back(last_x);
+        y.push_back(last_y);
+        z.push_back(last_z);
+        radious.push_back(1.0);
+    }
+
 
     void PhysicsUpdate() {
         // grid = create_grid();
 
         cell_first_particle = std::get<0>(grid);
         cell_particle_ids = std::get<1>(grid);
+
+        for (int i : cell_particle_ids){
+            CalcForce(i);
+        }
     }
 
     void PhysicsInit() {
         grid_size = std::cbrt(cell_first_particle.size());
-        cell_size = 15; // wip?
-        density_area = 15; // wip?
+        cell_size = 2; // wip? perchance?
+        density_area = 2; // wip?
         da2 = density_area * density_area;
+
+        default_x = cell_size * grid_size / 2.0;
+        default_y = cell_size * grid_size / 4.0 * 3;
+        default_z = cell_size * grid_size / 2.0;
+
+        for (int i = 0; i<= particle_count; i++){
+            CreateLiquidParticlesBegine();
+        }
+    }
+
+    void IncreaseParticles(){
+        x.push_back(default_x);
+        y.push_back(default_y);
+        z.push_back(default_z);
+        radious.push_back(1.0);
     }
 
 }
