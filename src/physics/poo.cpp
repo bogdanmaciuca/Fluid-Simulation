@@ -3,18 +3,19 @@
 #include <glm/glm.hpp>
 #include <tuple>
 #include <vector>
+#include "ui.hpp"
 
 std::tuple<std::vector<int>, std::vector<int>> grid;
 
 std::vector<int> cel_first_particle;
 std::vector<int> cel_particle_ids;
 
-int grid_size;
-int cell_size;
+float cell_size;
 int particle_count;
 float density_area;
 float da2; // precalculation for density_area^2
 glm::vec3 gravity(0.0, -9.81, 0.0);
+glm::ivec3 grid_size;
 
 // Pi = 3 btw
 
@@ -106,15 +107,17 @@ class Liquid: public Particle{
         int x_cell_coordinate = floor(x / cell_size), y_cell_coordinate = floor(y / cell_size),
             z_cell_coordinate = floor(z / cell_size);
 
-        int cell = x_cell_coordinate * grid_size * grid_size
-                    + y_cell_coordinate * grid_size + z_cell_coordinate;
         
+        int cell = z_cell_coordinate * grid_size.x * grid_size.y + y_cell_coordinate * grid_size.x + x_cell_coordinate;
+    
+        
+
         int cell_start = part_position + 1;
         int cell_end = cel_first_particle[cell + 1];
 
         CalcCellDensity(cell_start, cell_end);
 
-        if ((z_cell_coordinate + 1) * cell_size - z < density_area){
+        if ((x_cell_coordinate + 1) * cell_size - x < density_area){
             cell_start = cel_first_particle[cell + 1];
             cell_end = cel_first_particle[cell + 2];
 
@@ -122,43 +125,43 @@ class Liquid: public Particle{
         }
 
         if ((y_cell_coordinate + 1) * cell_size - y < density_area){
-            cell_start = cel_first_particle[cell + grid_size];
-            cell_end = cel_first_particle[cell + grid_size + 1];
-
-            CalcCellDensity(cell_start, cell_end);
-        }
-
-        if (((z_cell_coordinate + 1) * cell_size - z) * ((z_cell_coordinate + 1) * cell_size - z) + ((y_cell_coordinate + 1) * cell_size - y) * ((y_cell_coordinate + 1) * cell_size - y) < da2){
-            cell_start = cel_first_particle[cell + grid_size + 1];
-            cell_end = cel_first_particle[cell + grid_size + 2];
-
-            CalcCellDensity(cell_start, cell_end);
-        }
-
-        if ((x_cell_coordinate + 1) * cell_size - x < density_area){
-            cell_start = cel_first_particle[cell + grid_size * grid_size];
-            cell_end = cel_first_particle[cell + grid_size * grid_size + 1];
-
-            CalcCellDensity(cell_start, cell_end);
-        }
-
-        if (((z_cell_coordinate + 1) * cell_size - z) * ((z_cell_coordinate + 1) * cell_size - z) + ((x_cell_coordinate + 1) * cell_size - x) * ((x_cell_coordinate + 1) * cell_size - x) < da2){
-            cell_start = cel_first_particle[cell + 1 + grid_size * grid_size];
-            cell_end = cel_first_particle[cell + 2 + grid_size * grid_size];
+            cell_start = cel_first_particle[cell + grid_size.x];
+            cell_end = cel_first_particle[cell + grid_size.x + 1];
 
             CalcCellDensity(cell_start, cell_end);
         }
 
         if (((x_cell_coordinate + 1) * cell_size - x) * ((x_cell_coordinate + 1) * cell_size - x) + ((y_cell_coordinate + 1) * cell_size - y) * ((y_cell_coordinate + 1) * cell_size - y) < da2){
-            cell_start = cel_first_particle[cell + grid_size + grid_size * grid_size];
-            cell_end = cel_first_particle[cell + grid_size + grid_size * grid_size + 1];
+            cell_start = cel_first_particle[cell + grid_size.x + 1];
+            cell_end = cel_first_particle[cell + grid_size.x + 2];
+
+            CalcCellDensity(cell_start, cell_end);
+        }
+
+        if ((z_cell_coordinate + 1) * cell_size - z < density_area){
+            cell_start = cel_first_particle[cell + grid_size.x * grid_size.y];
+            cell_end = cel_first_particle[cell + grid_size.x * grid_size.y + 1];
+
+            CalcCellDensity(cell_start, cell_end);
+        }
+
+        if (((x_cell_coordinate + 1) * cell_size - x) * ((x_cell_coordinate + 1) * cell_size - x) + ((z_cell_coordinate + 1) * cell_size - z) * ((z_cell_coordinate + 1) * cell_size - z) < da2){
+            cell_start = cel_first_particle[cell + 1 + grid_size.x * grid_size.y];
+            cell_end = cel_first_particle[cell + 2 + grid_size.x * grid_size.y];
+
+            CalcCellDensity(cell_start, cell_end);
+        }
+
+        if (((z_cell_coordinate + 1) * cell_size - z) * ((z_cell_coordinate + 1) * cell_size - z) + ((y_cell_coordinate + 1) * cell_size - y) * ((y_cell_coordinate + 1) * cell_size - y) < da2){
+            cell_start = cel_first_particle[cell + grid_size.x + grid_size.x * grid_size.z];
+            cell_end = cel_first_particle[cell + grid_size.x + grid_size.x * grid_size.z + 1];
 
             CalcCellDensity(cell_start, cell_end);
         }
 
         if (((z_cell_coordinate + 1) * cell_size - z) * ((z_cell_coordinate + 1) * cell_size - z) + ((y_cell_coordinate + 1) * cell_size - y) * ((y_cell_coordinate + 1) * cell_size - y) + ((x_cell_coordinate + 1) * cell_size - x) * ((x_cell_coordinate + 1) * cell_size - y) < da2 * density_area){
-            cell_start = cel_first_particle[cell + grid_size * grid_size + grid_size + 1];
-            cell_end = cel_first_particle[cell + grid_size * grid_size + grid_size + 2];
+            cell_start = cel_first_particle[cell + grid_size.x * grid_size.y + grid_size.x + 1];
+            cell_end = cel_first_particle[cell + grid_size.x * grid_size.y + grid_size.x + 2];
 
             CalcCellDensity(cell_start, cell_end);
         }
@@ -170,7 +173,7 @@ class Liquid: public Particle{
 
         CalcCellForce(cell_start, cell_end);
 
-        if (z_cell_coordinate * cell_size - z < density_area){
+        if (x_cell_coordinate * cell_size - x < density_area){
             cell_start = cel_first_particle[cell - 1];
             cell_end = cel_first_particle[cell];
 
@@ -178,43 +181,43 @@ class Liquid: public Particle{
         }
 
         if (y_cell_coordinate * cell_size - y < density_area){
-            cell_start = cel_first_particle[cell - grid_size];
-            cell_end = cel_first_particle[cell - grid_size + 1];
-
-            CalcCellForce(cell_start, cell_end);
-        }
-
-        if ((z_cell_coordinate * cell_size - z) * (z_cell_coordinate * cell_size - z) + (y_cell_coordinate * cell_size - y) * (y_cell_coordinate * cell_size - y) < da2){
-            cell_start = cel_first_particle[cell - grid_size - 1];
-            cell_end = cel_first_particle[cell - grid_size];
-
-            CalcCellForce(cell_start, cell_end);
-        }
-
-        if (x_cell_coordinate * cell_size - x < density_area){
-            cell_start = cel_first_particle[cell - grid_size * grid_size];
-            cell_end = cel_first_particle[cell - grid_size * grid_size + 1];
-
-            CalcCellForce(cell_start, cell_end);
-        }
-
-        if ((z_cell_coordinate * cell_size - z) * (z_cell_coordinate * cell_size - z) + (z_cell_coordinate * cell_size - z) * (z_cell_coordinate * cell_size - z) < da2){
-            cell_start = cel_first_particle[cell - 1 - grid_size * grid_size];
-            cell_end = cel_first_particle[cell - grid_size * grid_size];
+            cell_start = cel_first_particle[cell - grid_size.x];
+            cell_end = cel_first_particle[cell - grid_size.x + 1];
 
             CalcCellForce(cell_start, cell_end);
         }
 
         if ((x_cell_coordinate * cell_size - x) * (x_cell_coordinate * cell_size - x) + (y_cell_coordinate * cell_size - y) * (y_cell_coordinate * cell_size - y) < da2){
-            cell_start = cel_first_particle[cell - grid_size - grid_size * grid_size];
-            cell_end = cel_first_particle[cell - grid_size - grid_size * grid_size + 1];
+            cell_start = cel_first_particle[cell - grid_size.x - 1];
+            cell_end = cel_first_particle[cell - grid_size.x];
+
+            CalcCellForce(cell_start, cell_end);
+        }
+
+        if (z_cell_coordinate * cell_size - z < density_area){
+            cell_start = cel_first_particle[cell - grid_size.x * grid_size.y];
+            cell_end = cel_first_particle[cell - grid_size.x * grid_size.y + 1];
+
+            CalcCellForce(cell_start, cell_end);
+        }
+
+        if ((x_cell_coordinate * cell_size - x) * (x_cell_coordinate * cell_size - x) + (z_cell_coordinate * cell_size - z) * (z_cell_coordinate * cell_size - z) < da2){
+            cell_start = cel_first_particle[cell - 1 - grid_size.x * grid_size.y];
+            cell_end = cel_first_particle[cell - grid_size.x * grid_size.y];
+
+            CalcCellForce(cell_start, cell_end);
+        }
+
+        if ((z_cell_coordinate * cell_size - z) * (z_cell_coordinate * cell_size - z) + (y_cell_coordinate * cell_size - y) * (y_cell_coordinate * cell_size - y) < da2){
+            cell_start = cel_first_particle[cell - grid_size.x - grid_size.y * grid_size.x];
+            cell_end = cel_first_particle[cell - grid_size.x - grid_size.y * grid_size.x + 1];
 
             CalcCellForce(cell_start, cell_end);
         }
 
         if ((z_cell_coordinate * cell_size - z) * (z_cell_coordinate * cell_size - z) + (y_cell_coordinate * cell_size - y) * (y_cell_coordinate * cell_size - y) * (x_cell_coordinate * cell_size - y) < da2 * density_area){
-            cell_start = cel_first_particle[cell - grid_size * grid_size - grid_size - 1];
-            cell_end = cel_first_particle[cell - grid_size * grid_size - grid_size];
+            cell_start = cel_first_particle[cell - grid_size.x * grid_size.y - grid_size.x - 1];
+            cell_end = cel_first_particle[cell - grid_size.x * grid_size.y - grid_size.x];
 
             CalcCellForce(cell_start, cell_end);
         }
@@ -305,14 +308,14 @@ class LiquidFactory{
     LiquidFactory(float x, float y, float z):default_x(x), default_y(y), default_z(z){}
 
     Liquid CreateLiquidParticleBegine(){
-        if (last_x < grid_size * cell_size){
+        if (last_x < grid_size.x * cell_size){
             last_x++;
         }
-        else if(last_y < grid_size * cell_size){
+        else if(last_y < grid_size.y * cell_size){
             last_x = 1.0;
             last_y++;
         }
-        else if(last_y < grid_size * cell_size){
+        else if(last_y < grid_size.y * cell_size){
             last_x = 1.0;
             last_y = 1.0;
             last_z++;
@@ -322,6 +325,18 @@ class LiquidFactory{
 
     Liquid CreateLiquidParticle(){
         return Liquid(default_x, default_y, default_z, 1.0);
+    }
+
+    void SetX(float x){
+        default_x = x;
+    }
+
+    void SetY(float y){
+        default_y = y;
+    }
+
+    void SetZ(float z){
+        default_z = z;
     }
 };
 
@@ -341,14 +356,14 @@ void PhysicsUpdate(){
 }
 
 void PhysicsInit(){
-    grid_size = std::cbrt(cel_first_particle.size());
-    cell_size = 2; //wip
-    density_area = 2; //wip
+    cell_size = g_ui.grid_cell_size;
+    grid_size = g_ui.box_size / cell_size;
+    density_area = cell_size; //wip
     da2 = density_area * density_area;
 
 
 
-    liquid_factory = LiquidFactory(cell_size * grid_size / 2, cell_size * grid_size * 3 / 4, cell_size * grid_size / 2);
+    liquid_factory = LiquidFactory(cell_size * grid_size.x / 2, cell_size * grid_size.y * 3 / 4, cell_size * grid_size.z / 2);
 
     for(int i = 0; i < particle_count; i++){
         particles.push_back(liquid_factory.CreateLiquidParticleBegine());
