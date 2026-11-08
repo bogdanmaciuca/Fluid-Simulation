@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <tuple>
 #include <vector>
-#include "ui.hpp"
+#include "../ui.hpp"
 
 std::tuple<std::vector<int>, std::vector<int>> grid;
 
@@ -360,6 +360,7 @@ void PhysicsInit(){
     grid_size = g_ui.box_size / cell_size;
     density_area = cell_size; //wip
     da2 = density_area * density_area;
+    particle_count = 0;
 
 
 
@@ -371,5 +372,19 @@ void PhysicsInit(){
 }
 
 void IncreaseParticles(){
+    particle_count++;
     particles.push_back(liquid_factory.CreateLiquidParticle());
+}
+
+void DecreaseParticles(){
+    particles.pop_back();
+    particle_count--;
+}
+
+void UpdateGridSize(glm::vec3 new_box_size){
+    grid_size = g_ui.box_size / cell_size;
+    
+    liquid_factory.SetX(cell_size * grid_size.x / 2);
+    liquid_factory.SetY(cell_size * grid_size.y * 3 / 4);
+    liquid_factory.SetZ(cell_size * grid_size.z / 2);
 }
