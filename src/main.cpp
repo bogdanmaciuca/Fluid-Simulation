@@ -1,6 +1,7 @@
 #include "camera.hpp"
 #include "main_loop.hpp"
 #include "physics.hpp"
+#include "physics/physics.hpp"
 #include "renderer.hpp"
 #include "ui.hpp"
 
@@ -17,7 +18,7 @@ int main() {
     g_ui.collision_iter_num = 2;
     g_ui.pressure_iter_num  = 10;
 
-    Physics physics;
+    PhysicsInit();
 
     const glm::vec3 obstacle_position(-100.0f);
     const float     obstacle_radius = 0.15f;
@@ -43,19 +44,19 @@ int main() {
         if      (keyboard[SDL_SCANCODE_A]) { camera.ProcessKeyboard(CameraMovement::Left,     delta_time); }
         else if (keyboard[SDL_SCANCODE_D]) { camera.ProcessKeyboard(CameraMovement::Right,    delta_time); }
 
-        g_ui.particle_num = physics.ParticleNum();
+        // g_ui.particle_num = physics.ParticleNum();
 
         RendererSetViewMatrix(camera.GetViewMatrix());
-        RendererDrawFrame(physics.ParticlePositions(), physics.ParticleColors());
+        RendererDrawFrame(PhysicsGetPositions(), Colors());
     };
 
     const auto fixed_update = [&](float timestep) {
-        if (g_ui.reset_simulation) {
-            physics.Reset();
-            g_ui.reset_simulation = false;
-        }
+            if (g_ui.reset_simulation) {
+                PhysicsInit();
+                g_ui.reset_simulation = false;
+            }
 
-        physics.Update(timestep, obstacle_position, obstacle_radius);
+            PhysicsUpdate();
     };
 
     MainLoop(variable_update, fixed_update);

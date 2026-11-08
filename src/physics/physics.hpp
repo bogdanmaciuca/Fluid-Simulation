@@ -3,8 +3,9 @@
 
 void PhysicsUpdate();
 void PhysicsInit();
+std::span<glm::vec3> PhysicsGetPositions();
+std::span<glm::vec3> Colors();
 
-constexpr std::size_t MAX_PARTICLE_NUM = 1'000'000;
 
 std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> GenerateGrid(
     const std::vector<glm::vec3>& positions,
