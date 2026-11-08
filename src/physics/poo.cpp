@@ -331,7 +331,7 @@ std::span<const glm::vec3> PhysicsUpdate(){
     // cel_particle_ids = std::get<1>(grid);
 
 
-    glm::vec3 pozitions[particle_count];
+    glm::vec3 positions[particle_count];
 
     for(int i : cel_particle_ids){
         particles[i].CalcForce(i);
@@ -339,11 +339,11 @@ std::span<const glm::vec3> PhysicsUpdate(){
 
     for(int i = 0; i < particle_count; i++){
         particles[i].IncreasePosition(particles[i].GetForce() * delta_time);
-        pozitions[i] = particles[i].GetPosition();
+        positions[i] = particles[i].GetPosition();
         particles[i].ResetForce();
     }
  
-    std::span<const glm::vec3> sphere_positions(pozitions, size_t(pozitions));
+    return std::span(positions, size_t(positions));
 }
 
 void PhysicsInit(){
