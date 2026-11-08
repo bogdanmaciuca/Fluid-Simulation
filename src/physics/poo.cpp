@@ -2,8 +2,6 @@
 #include "../ui.hpp"
 #include "../main_loop.hpp"
 
-std::tuple<std::vector<int>, std::vector<int>> grid;
-
 std::vector<int> cel_first_particle;
 std::vector<int> cel_particle_ids;
 
@@ -328,11 +326,9 @@ class LiquidFactory{
 
 LiquidFactory liquid_factory;
 
-void PhysicsUpdate(){
-    // grid = create_grid();
-
-    cel_first_particle = std::get<0>(grid);
-    cel_particle_ids = std::get<1>(grid);
+std::span<const glm::vec3> PhysicsUpdate(){
+    // cel_first_particle = std::get<0>(grid);
+    // cel_particle_ids = std::get<1>(grid);
 
 
     glm::vec3 pozitions[particle_count];
@@ -347,7 +343,7 @@ void PhysicsUpdate(){
         particles[i].ResetForce();
     }
  
-    std::span<const glm::vec3> sphere_positions();
+    std::span<const glm::vec3> sphere_positions(pozitions, size_t(pozitions));
 }
 
 void PhysicsInit(){
@@ -377,7 +373,7 @@ void DecreaseParticles(){
     particle_count--;
 }
 
-void UpdateGridSize(glm::vec3 new_box_size){
+void UpdateGridSize(){
     grid_size = g_ui.box_size / cell_size;
     
     liquid_factory.SetX(cell_size * grid_size.x / 2);
