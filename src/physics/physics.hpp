@@ -1,11 +1,5 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-#include <tuple>
-#include <vector>
-
-#include <glm/glm.hpp>
 
 void PhysicsUpdate();
 void PhysicsInit();

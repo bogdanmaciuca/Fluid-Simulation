@@ -1,9 +1,4 @@
 // destept land
-#include <cmath>
-#include <tuple>
-#include <vector>
-
-#include <glm/glm.hpp>
 #include "../ui.hpp"
 
 namespace dod

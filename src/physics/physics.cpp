@@ -1,9 +1,5 @@
 #include "physics.hpp"
 
-#include <algorithm>
-#include <cmath>
-#include <utility>
-
 std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> GenerateGrid(
     const std::vector<glm::vec3>& positions,
     const glm::ivec3& cell_num,
