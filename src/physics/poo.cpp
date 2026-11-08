@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <tuple>
 #include <vector>
-#include "ui.hpp"
+#include "../ui.hpp"
 
 std::tuple<std::vector<int>, std::vector<int>> grid;
 
