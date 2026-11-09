@@ -6,10 +6,10 @@ constexpr int DEFAULT_WND_HEIGHT = 675;
 bool RendererInitialize();
 void RendererShutdown();
 
-void RendererSetViewMatrix(const glm::mat4& view);
+void RendererSetViewMatrix(const glm::dmat4& view);
 void RendererImGui(std::function<void()> f);
 void RendererDrawFrame(
-    std::span<const glm::vec3> sphere_positions,
-    std::span<const glm::vec3> sphere_colors
+    std::span<const glm::dvec3> sphere_positions,
+    std::span<const glm::dvec3> sphere_colors
 );
 

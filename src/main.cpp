@@ -1,6 +1,5 @@
 #include "camera.hpp"
 #include "main_loop.hpp"
-#include "physics.hpp"
 #include "physics/physics.hpp"
 #include "renderer.hpp"
 #include "ui.hpp"
@@ -13,25 +12,20 @@ int main() {
 
     const bool* keyboard = SDL_GetKeyboardState(nullptr);
 
-    g_ui.box_size           = glm::vec3(0.5f);
-    g_ui.substep_num        = 4;
-    g_ui.collision_iter_num = 2;
-    g_ui.pressure_iter_num  = 10;
-
     PhysicsInit();
 
-    const glm::vec3 obstacle_position(-100.0f);
-    const float     obstacle_radius = 0.15f;
+    const glm::dvec3 obstacle_position(-100.0);
+    const double     obstacle_radius = 0.15;
 
-    Camera camera(glm::vec3(
-        g_ui.box_size.x * 0.5f,
-        g_ui.box_size.y * 0.5f,
-        g_ui.box_size.z * 2.5f
+    Camera camera(glm::dvec3(
+        g_ui.box_size.x * 0.5,
+        g_ui.box_size.y * 0.5,
+        g_ui.box_size.z * 2.5
     ));
 
-    const auto variable_update = [&](float delta_time) {
-        // Process mouse movement for camera only if LMB is down and ImGui is not
-        // using the mouse (e.g. dragging a slider or hovering a window).
+    const auto variable_update = [&](double delta_time) {
+        // Process mouse movement for camera only if LMB is down and ImGui is
+        // not using the mouse
         float dx, dy;
         SDL_MouseButtonFlags mouse_flags = SDL_GetRelativeMouseState(&dx, &dy);
         if (!ImGui::GetIO().WantCaptureMouse && (mouse_flags & SDL_BUTTON_LMASK)) {
@@ -44,19 +38,18 @@ int main() {
         if      (keyboard[SDL_SCANCODE_A]) { camera.ProcessKeyboard(CameraMovement::Left,     delta_time); }
         else if (keyboard[SDL_SCANCODE_D]) { camera.ProcessKeyboard(CameraMovement::Right,    delta_time); }
 
-        // g_ui.particle_num = physics.ParticleNum();
+        // g_ui.particle_num = PhysicsGetParticleNum();
 
         RendererSetViewMatrix(camera.GetViewMatrix());
-        RendererDrawFrame(PhysicsGetPositions(), Colors());
+        RendererDrawFrame(PhysicsGetPositions(), PhysicsGetColors());
     };
 
-    const auto fixed_update = [&](float timestep) {
-            if (g_ui.reset_simulation) {
-                PhysicsInit();
-                g_ui.reset_simulation = false;
-            }
-
-            PhysicsUpdate();
+    const auto fixed_update = [&](double timestep) {
+        constexpr int NUM_SUBSTEPS = 10;
+        constexpr double SUBSTEP = FIXED_TIMESTEP / (double)NUM_SUBSTEPS;
+        for (int i = 0; i < NUM_SUBSTEPS; i++) {
+            PhysicsUpdate(SUBSTEP);
+        }
     };
 
     MainLoop(variable_update, fixed_update);

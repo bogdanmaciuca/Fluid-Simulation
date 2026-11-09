@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <immintrin.h>
 #include <iostream>
 #include <optional>
 #include <span>

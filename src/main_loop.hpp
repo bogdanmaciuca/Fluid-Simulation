@@ -1,8 +1,8 @@
 #pragma once
 
-constexpr float FIXED_TIMESTEP = 0.01666f; // 60Hz
+constexpr double FIXED_TIMESTEP = 0.01666; // 60Hz
 
-using UpdateFunc = std::function<void(float delta_time)>;
+using UpdateFunc = std::function<void(double delta_time)>;
 
 void MainLoop(UpdateFunc variable_update, UpdateFunc fixed_update);
 

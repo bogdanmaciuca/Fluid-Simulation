@@ -3,21 +3,21 @@
 #include "ui.hpp"
 
 void MainLoop(UpdateFunc variable_update, UpdateFunc fixed_update) {
-    constexpr float MAX_FRAME_TIME  = 0.25f;
-    constexpr int   MAX_FIXED_STEPS = 4;
+    constexpr double MAX_FRAME_TIME  = 0.25;
+    constexpr int    MAX_FIXED_STEPS = 4;
 
-    bool  running      = true;
-    float t            = 0.0f;
-    float dt           = FIXED_TIMESTEP;
-    auto  current_time = std::chrono::high_resolution_clock::now();
-    float accumulator  = 0.0f;
+    bool   running      = true;
+    double t            = 0.0;
+    double dt           = FIXED_TIMESTEP;
+    auto   current_time = std::chrono::high_resolution_clock::now();
+    double accumulator  = 0.0;
 
     while (running) {
         {
             Timer frame_timer("Frame");
 
             auto new_time = std::chrono::high_resolution_clock::now();
-            float frame_time = std::chrono::duration<float>(new_time - current_time).count();
+            double frame_time = std::chrono::duration<double>(new_time - current_time).count();
             current_time = new_time;
             frame_time = std::min(frame_time, MAX_FRAME_TIME);
 
@@ -47,7 +47,7 @@ void MainLoop(UpdateFunc variable_update, UpdateFunc fixed_update) {
 
                 // Drop stale time instead of trying to catch up forever.
                 if (steps == MAX_FIXED_STEPS) {
-                    accumulator = 0.0f;
+                    accumulator = 0.0;
                 }
             }
 

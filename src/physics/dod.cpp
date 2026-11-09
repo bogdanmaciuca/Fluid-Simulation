@@ -1,330 +1,197 @@
-// destept land
+#include "internal.hpp"
+
+#include <algorithm>
+
+#include "../timer.hpp"
 #include "../ui.hpp"
-#include "../main_loop.hpp"
-#include "physics.hpp"
 
-namespace dod
-{
+using namespace glm;
 
-    std::tuple<std::vector<int>, std::vector<int>> grid;
-    std::vector<u_int> cel_first_particle;
-    std::vector<u_int> cel_particle_ids;
+namespace {
+    uint32_t              s_num;
+    std::vector<dvec3>    s_pos;
+    std::vector<dvec3>    s_vel;
+    std::vector<dvec3>    s_acc;
+    std::vector<double>   s_dens;
+    std::vector<double>   s_pres;
+    Grid                  s_grid;
 
-    glm::ivec3 grid_size;
-    float cell_size;
-    int particle_count;
-    float density_area;
-    float delta_time;
-    float da2;
+    std::vector<dvec3>    s_colors;
 
-    glm::vec3 g = glm::vec3(0.0,-9.81,0.0);
+    uint64_t              s_neighbor_checks = 0;
 
-    std::vector<glm::vec3> positions;
-    std::vector<glm::vec3> colors;
-    std::vector<float> m;
+    void ResetParticles() {
+        double spacing = std::cbrt(PARTICLE_MASS / REST_DENSITY);
+        ivec3 count = g_ui.box_size / spacing / 1.2;
+        s_num = count.x * count.y * count.z;
+        // s_pos.resize(s_num);
+        s_vel.assign(s_num, dvec3(0));
+        s_acc.assign(s_num, dvec3(0));
+        s_dens.resize(s_num);
+        s_pres.resize(s_num);
 
-    std::vector<float> radious; // why is it misspelled?
-    std::vector<float> density;
-    std::vector<float> pressure;
-    std::vector<glm::vec3> force;
-
-    namespace {
-
-        float Poly6Kernel(float r2) {
-            const float diff = da2 - r2;
-            if (diff <= 0.0f)
-            {
-                return 0.0f;
-            }
-
-            return 315.0f / (64.0f * 3.0f * std::pow(density_area,9)) * diff * diff * diff;
-        }
-
-        float TaitEquation(float rest_density, float exponent, float stiffness, float particle_density) {
-            return stiffness * rest_density / exponent * (std::pow(particle_density / rest_density, exponent) - 1.0f);
-        }
-
-        glm::vec3 SpikyGradient(const glm::vec3 &r_vec, float r) {
-            if (r <= 1e-6f || r >= density_area)
-            {
-                return glm::vec3(0.0f);
-            }
-
-            const float diff = density_area - r;
-            const float coef = -45.0f / (3.0f * da2 * da2 * da2) * diff * diff / r;
-            return r_vec * coef;
-        }
-
-        void CalcCellDensity(int particle, int cell_start, int cell_end) { //what does calc stand for? 
-            for (int i = cell_start; i < cell_end; ++i)
-            {
-                int neighbor = cel_particle_ids[i];
-
-                float dx = positions[neighbor].x - positions[particle].x;
-                float dy = positions[neighbor].y - positions[particle].y;
-                float dz = positions[neighbor].z - positions[particle].z;
-
-                float range = dx * dx + dy * dy + dz * dz;
-                float density_impact = Poly6Kernel(range);
-
-                density[particle] += density_impact;
-                density[neighbor] += density_impact;
-            }
-        }
-
-        void CalcCellForce(int particle, int cell_start, int cell_end) {
-            for (int i = cell_start; i < cell_end; ++i)
-            {
-                int neighbor = cel_particle_ids[i];
-
-                float dx = positions[neighbor].x - positions[particle].x;
-                float dy = positions[neighbor].y - positions[particle].y;
-                float dz = positions[neighbor].z - positions[particle].z;
-
-                float range = std::sqrt(dx * dx + dy * dy + dz * dz);
-                glm::vec3 force_impact =
-                    m[neighbor] * (pressure[particle] + pressure[neighbor]) /
-                    (2.0f * density[neighbor]) * SpikyGradient(glm::vec3(dx, dy, dz), range);
-
-                force[particle] += force_impact;
-                force[neighbor] -= force_impact;
-            }
-        }
-
-        void CalcForce(int particle_position) {
-            density[particle_position] = 0.0f;
-            pressure[particle_position] = 0.0f;
-            
-
-            float particle_x = positions[particle_position].x;
-            float particle_y = positions[particle_position].y;
-            float particle_z = positions[particle_position].z;
-
-            int x_cell_coordinate = floor(particle_x / cell_size);
-            int y_cell_coordinate = floor(particle_y / cell_size);
-            int z_cell_coordinate = floor(particle_z / cell_size);
-
-            int cell = z_cell_coordinate * grid_size.x * grid_size.y + y_cell_coordinate * grid_size.x + x_cell_coordinate;
-    
-        
-
-            int cell_start = particle_position + 1;
-            int cell_end;
-            if (z_cell_coordinate == grid_size.z && y_cell_coordinate == grid_size.y && x_cell_coordinate == grid_size.x){
-                cell_end = particle_count;
-            }else {
-                cell_end = cel_first_particle[cell + 1];
-                
-                CalcCellDensity(particle_position, cell_start, cell_end);
-                
-                if ((x_cell_coordinate + 1) * cell_size - positions[particle_position].x < density_area){
-                    cell_start = cel_first_particle[cell + 1];
-                    cell_end = cel_first_particle[cell + 2];
-                    
-                    CalcCellDensity(particle_position, cell_start, cell_end);
-                }
-                
-                if ((y_cell_coordinate + 1) * cell_size - positions[particle_position].y < density_area){
-                    cell_start = cel_first_particle[cell + grid_size.x];
-                    cell_end = cel_first_particle[cell + grid_size.x + 1];
-                    
-                    CalcCellDensity(particle_position, cell_start, cell_end);
-                }
-                
-                if (((x_cell_coordinate + 1) * cell_size - positions[particle_position].x) * ((x_cell_coordinate + 1) * cell_size - positions[particle_position].x) + ((y_cell_coordinate + 1) * cell_size - positions[particle_position].y) * ((y_cell_coordinate + 1) * cell_size - positions[particle_position].y) < da2){
-                    cell_start = cel_first_particle[cell + grid_size.x + 1];
-                    cell_end = cel_first_particle[cell + grid_size.x + 2];
-                    
-                    CalcCellDensity(particle_position, cell_start, cell_end);
-                }
-                
-                if ((z_cell_coordinate + 1) * cell_size - positions[particle_position].z < density_area){
-                    cell_start = cel_first_particle[cell + grid_size.x * grid_size.y];
-                    cell_end = cel_first_particle[cell + grid_size.x * grid_size.y + 1];
-                    
-                    CalcCellDensity(particle_position, cell_start, cell_end);
-                }
-                
-                if (((x_cell_coordinate + 1) * cell_size - positions[particle_position].x) * ((x_cell_coordinate + 1) * cell_size - positions[particle_position].x) + ((z_cell_coordinate + 1) * cell_size - positions[particle_position].z) * ((z_cell_coordinate + 1) * cell_size - positions[particle_position].z) < da2){
-                    cell_start = cel_first_particle[cell + 1 + grid_size.x * grid_size.y];
-                    cell_end = cel_first_particle[cell + 2 + grid_size.x * grid_size.y];
-                    
-                    CalcCellDensity(particle_position, cell_start, cell_end);
-                }
-                
-                if (((z_cell_coordinate + 1) * cell_size - positions[particle_position].z) * ((z_cell_coordinate + 1) * cell_size - positions[particle_position].z) + ((y_cell_coordinate + 1) * cell_size - positions[particle_position].y) * ((y_cell_coordinate + 1) * cell_size - positions[particle_position].y) < da2){
-                    cell_start = cel_first_particle[cell + grid_size.x + grid_size.x * grid_size.z];
-                    cell_end = cel_first_particle[cell + grid_size.x + grid_size.x * grid_size.z + 1];
-                    
-                    CalcCellDensity(particle_position, cell_start, cell_end);
-                }
-                
-                if (((z_cell_coordinate + 1) * cell_size - positions[particle_position].z) * ((z_cell_coordinate + 1) * cell_size - positions[particle_position].z) + ((y_cell_coordinate + 1) * cell_size - positions[particle_position].y) * ((y_cell_coordinate + 1) * cell_size - positions[particle_position].y) + ((x_cell_coordinate + 1) * cell_size - positions[particle_position].x) * ((x_cell_coordinate + 1) * cell_size - positions[particle_position].y) < da2 * density_area){
-                    cell_start = cel_first_particle[cell + grid_size.x * grid_size.y + grid_size.x + 1];
-                    cell_end = cel_first_particle[cell + grid_size.x * grid_size.y + grid_size.x + 2];
-                    
-                    CalcCellDensity(particle_position, cell_start, cell_end);
-                }
-                
-                pressure[particle_position] = TaitEquation(0.003, 7, 2, density[particle_position]);
-                
-                cell_start = cel_first_particle[cell];
-                cell_end = particle_position;
-                
-                CalcCellForce(particle_position, cell_start, cell_end);
-                
-                if (x_cell_coordinate * cell_size - positions[particle_position].x < density_area && cell > 0){
-                    cell_start = cel_first_particle[cell - 1];
-                    cell_end = cel_first_particle[cell];
-                    
-                    CalcCellForce(particle_position, cell_start, cell_end);
-                }
-                
-                if (y_cell_coordinate * cell_size - positions[particle_position].y < density_area){
-                    cell_start = cel_first_particle[cell - grid_size.x];
-                    cell_end = cel_first_particle[cell - grid_size.x + 1];
-                    
-                    CalcCellForce(particle_position, cell_start, cell_end);
-                }
-                
-                if ((x_cell_coordinate * cell_size - positions[particle_position].x) * (x_cell_coordinate * cell_size - positions[particle_position].x) + (y_cell_coordinate * cell_size - positions[particle_position].y) * (y_cell_coordinate * cell_size - positions[particle_position].y) < da2){
-                    cell_start = cel_first_particle[cell - grid_size.x - 1];
-                    cell_end = cel_first_particle[cell - grid_size.x];
-                    
-                    CalcCellForce(particle_position, cell_start, cell_end);
-                }
-                
-                if (z_cell_coordinate * cell_size - positions[particle_position].z < density_area){
-                    cell_start = cel_first_particle[cell - grid_size.x * grid_size.y];
-                    cell_end = cel_first_particle[cell - grid_size.x * grid_size.y + 1];
-                    
-                    CalcCellForce(particle_position, cell_start, cell_end);
-                }
-                
-                if ((x_cell_coordinate * cell_size - positions[particle_position].x) * (x_cell_coordinate * cell_size - positions[particle_position].x) + (z_cell_coordinate * cell_size - positions[particle_position].z) * (z_cell_coordinate * cell_size - positions[particle_position].z) < da2){
-                    cell_start = cel_first_particle[cell - 1 - grid_size.x * grid_size.y];
-                    cell_end = cel_first_particle[cell - grid_size.x * grid_size.y];
-                    
-                    CalcCellForce(particle_position, cell_start, cell_end);
-                }
-                
-                if ((z_cell_coordinate * cell_size - positions[particle_position].z) * (z_cell_coordinate * cell_size - positions[particle_position].z) + (y_cell_coordinate * cell_size - positions[particle_position].y) * (y_cell_coordinate * cell_size - positions[particle_position].y) < da2){
-                    cell_start = cel_first_particle[cell - grid_size.x - grid_size.y * grid_size.x];
-                    cell_end = cel_first_particle[cell - grid_size.x - grid_size.y * grid_size.x + 1];
-                    
-                    CalcCellForce(particle_position, cell_start, cell_end);
-                }
-                
-                if ((z_cell_coordinate * cell_size - positions[particle_position].z) * (z_cell_coordinate * cell_size - positions[particle_position].z) + (y_cell_coordinate * cell_size - positions[particle_position].y) * (y_cell_coordinate * cell_size - positions[particle_position].y) * (x_cell_coordinate * cell_size - positions[particle_position].y) < da2 * density_area){
-                    cell_start = cel_first_particle[cell - grid_size.x * grid_size.y - grid_size.x - 1];
-                    cell_end = cel_first_particle[cell - grid_size.x * grid_size.y - grid_size.x];
-                    
-                    CalcCellForce(particle_position, cell_start, cell_end);
+        for (int z = 0; z < count.z; ++z) {
+            for (int y = 0; y < count.y; ++y) {
+                for (int x = 0; x < count.x; ++x) {
+                    dvec3 pos = dvec3(x * spacing, y * spacing, z * spacing);
+                    s_pos.push_back(pos);
                 }
             }
-                
-            force[particle_position] += g;
-        }
-
-        void ResetForce(int particle_position){
-            force[particle_position] = glm::vec3(0.0f);
-        }   
-
-    } 
-    
-    
-    float last_x = 0.01; 
-    float last_y = 0.01; 
-    float last_z = 0.01;
-    
-    float default_x, default_y, default_z;
-    
-    void CreateLiquidParticlesBegine(){
-        if (last_x < grid_size.x * cell_size){
-            last_x+=0.01;
-        }
-        else if (last_y < grid_size.y * cell_size) {
-            last_x = 0.01;
-            last_y+=0.01;
-        }
-        else if (last_z < grid_size.z * cell_size) {
-            last_y = 0.01;
-            last_z+=0.01;
-        }
-        
-        positions.push_back(glm::vec3(last_x,last_y,last_z));
-        radious.push_back(1.0);
-    }
-
-    void UpdateGridSize(){
-        grid_size = g_ui.box_size / cell_size;
-        
-        default_x =  cell_size * grid_size.x / 2;
-        default_y = cell_size * grid_size.y * 3 / 4;
-        default_z = cell_size * grid_size.z / 2;
-    }
-    
-    
-    void PhysicsUpdate() {
-        // grid = create_grid();
-
-        
-        UpdateGridSize();
-
-        std::tie(cel_first_particle, cel_particle_ids) = GenerateGrid(positions, grid_size, 1.0f/ cell_size);
-        
-        // cel_first_particle = std::get<0>(grid);
-        // cel_particle_ids = std::get<1>(grid);
-        
-        for (int i : cel_particle_ids){
-            CalcForce(i);
-        }
-
-        for(int i = 0; i < particle_count; i++){
-            positions[i] += force[i] * delta_time;
-            ResetForce(i);
         }
     }
 
-    std::span<glm::vec3> PhyisicsGetPositions(){
-        return positions;
-    }
+    // Ugly as phuck
+    template<typename F>
+    void ForAllNeighbors(uint32_t p, F&& f) {
+        dvec3 pos = s_pos[p];
+        ivec3 center_cell = s_grid.CellPosFromPos(pos);
+        ivec3 grid_size = s_grid.GetSize();
 
-    std::span<glm::vec3> PhysicsGetColors(){
-        colors.resize(particle_count);
-        for (int i = 0; i < particle_count; ++i){
-            colors[i] = glm::vec3(0.0,0.0,1.0);
+        // Loop through the 3x3x3 neighborhood (-1 to +1 in each axis)
+        for (int dz = -1; dz <= 1; ++dz) {
+            int cz = center_cell.z + dz;
+            if (cz < 0 || cz >= grid_size.z) continue; // Out of bounds, skip
+
+            for (int dy = -1; dy <= 1; ++dy) {
+                int cy = center_cell.y + dy;
+                if (cy < 0 || cy >= grid_size.y) continue; // Out of bounds, skip
+
+                for (int dx = -1; dx <= 1; ++dx) {
+                    int cx = center_cell.x + dx;
+                    if (cx < 0 || cx >= grid_size.x) continue; // Out of bounds, skip
+
+                    // Compute valid neighbor cell index
+                    uint32_t neighbor_cell_idx = s_grid.CellIdx(ivec3(cx, cy, cz));
+
+                    // Iterate through all particles in this neighboring cell
+                    for (uint32_t neighbor : s_grid.GetCellParticleIDs(neighbor_cell_idx)) {
+                        if (neighbor != p) {
+                            ++s_neighbor_checks;
+                            f(neighbor);
+                        }
+                    }
+                }
+            }
         }
-
-        return  std::span(colors);
     }
 
-    void PhysicsInit() {
-        delta_time = FIXED_TIMESTEP;
-        grid_size = g_ui.box_size / g_ui.grid_cell_size;
-        cell_size = g_ui.grid_cell_size;
-        density_area = cell_size; // wip?
-        da2 = density_area * density_area;
-        particle_count = 0;
+    void ComputeDensityAndPressure() {
+        for (int p = 0; p < s_num; ++p) {
+            double& dens = s_dens[p];
+            double& pres = s_pres[p];
 
-        default_x = cell_size * grid_size.x / 2.0;
-        default_y = cell_size * grid_size.y / 4.0 * 3;
-        default_z = cell_size * grid_size.z / 2.0;
+            dens = PARTICLE_MASS * Poly6Kernel(0.0);
+            ForAllNeighbors(p, [&](uint32_t neighbor) {
+                double r_2 = distance2(s_pos[p], s_pos[neighbor]);
+                if (r_2 < SMOOTHING_LENGTH_2) {
+                    dens += PARTICLE_MASS * Poly6Kernel(r_2);
+                }
+            });
 
-        for (int i = 0; i < particle_count; i++){
-            CreateLiquidParticlesBegine();
+            double density_ratio = dens / REST_DENSITY;
+            pres = TAIT_COEF * (std::pow(density_ratio, GAMMA) - 1.0);
+            if (pres < 0.0) {
+                pres = 0.0;
+            }
         }
     }
 
-    void IncreaseParticles(){
-        particle_count++;
-        positions.push_back(glm::vec3(default_x, default_y, default_z));
-        radious.push_back(1.0);
+    dvec3 Jet(double t) {
+        t = std::clamp(t, 0.0, 1.0);
+        return dvec3(
+            std::clamp(std::min(4.0 * t - 1.5, -4.0 * t + 4.5), 0.0, 1.0),
+            std::clamp(std::min(4.0 * t - 0.5, -4.0 * t + 3.5), 0.0, 1.0),
+            std::clamp(std::min(4.0 * t + 0.5, -4.0 * t + 2.5), 0.0, 1.0)
+        );
     }
 
-    void DecreaseParticles(){
-        particle_count--;
-        positions.pop_back();
-        radious.pop_back();
+    void ComputeColors() {
+        double max_pres = 0.0;
+        for (int p = 0; p < s_num; ++p) {
+            max_pres = std::max(max_pres, s_pres[p]);
+        }
+        s_colors.resize(s_num);
+        for (int p = 0; p < s_num; ++p) {
+            double t = (max_pres > 0.0) ? s_pres[p] / max_pres : 0.0;
+            s_colors[p] = Jet(t);
+        }
+    }
+
+    void ComputeForces() {
+        for (int p = 0; p < s_num; ++p) {
+            dvec3 pressure_force(0.0);
+            dvec3 viscosity_force(0.0);
+
+            dvec3 pos_i = s_pos[p];
+            dvec3 vel_i = s_vel[p];
+            double rho_i  = s_dens[p];
+            double pres_i = s_pres[p];
+
+            ForAllNeighbors(p, [&](uint32_t neighbor) {
+                dvec3 pos_j = s_pos[neighbor];
+                dvec3 r_vec = pos_i - pos_j;
+                double r_2 = distance2(pos_i, pos_j);
+
+                if (r_2 < SMOOTHING_LENGTH_2) {
+                    double r = std::sqrt(r_2);
+                    double pres_j = s_pres[neighbor];
+                    double rho_j = s_dens[neighbor];
+
+                    // Pressure Force (Symmetric Monaghan form)
+                    dvec3 grad_w = SpikyGradient(r_vec, r);
+                    pressure_force -= PARTICLE_MASS * (pres_i / (rho_i * rho_i) + pres_j / (rho_j * rho_j)) * grad_w;
+
+                    // Viscosity Force
+                    dvec3 vel_j = s_vel[neighbor];
+                    double laplacian = ViscosityLaplacian(r);
+                    viscosity_force += g_ui.viscosity * PARTICLE_MASS * ((vel_j - vel_i) / rho_j) * laplacian;
+                }
+            });
+
+            s_acc[p] = pressure_force + viscosity_force + dvec3(0, g_ui.gravity, 0);
+        }
+    }
+
+    void Integrate(double dt) {
+        const dvec3 box_min(0.0);
+        const dvec3 box_max(g_ui.box_size);
+
+        for (int p = 0; p < s_num; ++p) {
+            s_vel[p] += s_acc[p] * dt;
+            s_pos[p] += s_vel[p] * dt;
+
+            if (s_pos[p].x < box_min.x) { s_pos[p].x = box_min.x; s_vel[p].x *= -g_ui.restitution; }
+            if (s_pos[p].x > box_max.x) { s_pos[p].x = box_max.x; s_vel[p].x *= -g_ui.restitution; }
+
+            if (s_pos[p].y < box_min.y) { s_pos[p].y = box_min.y; s_vel[p].y *= -g_ui.restitution; }
+            if (s_pos[p].y > box_max.y) { s_pos[p].y = box_max.y; s_vel[p].y *= -g_ui.restitution; }
+
+            if (s_pos[p].z < box_min.z) { s_pos[p].z = box_min.z; s_vel[p].z *= -g_ui.restitution; }
+            if (s_pos[p].z > box_max.z) { s_pos[p].z = box_max.z; s_vel[p].z *= -g_ui.restitution; }
+        }
     }
 }
+
+void PhysicsDODInit() {
+    ResetParticles();
+}
+
+void PhysicsDODUpdate(double dt) {
+    s_neighbor_checks = 0;
+    { Timer t("Grid Update");     s_grid.Update(s_pos); }
+    { Timer t("Density & Pressure"); ComputeDensityAndPressure(); }
+    { Timer t("Forces");          ComputeForces(); }
+    { Timer t("Integrate");       Integrate(dt); }
+    { Timer t("Colors");          ComputeColors(); }
+
+    std::cout << (double)s_neighbor_checks / s_num << "\n";
+}
+
+std::span<dvec3> PhysicsDODGetPositions() {
+    return s_pos;
+}
+
+std::span<dvec3> PhysicsDODGetColors() {
+    return s_colors;
+}
+

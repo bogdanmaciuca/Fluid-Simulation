@@ -33,13 +33,16 @@ namespace {
         float     aspect_ratio;
         float     radius;
     };
-    glm::mat4 s_view = glm::mat4(1);
+    glm::dmat4 s_view = glm::dmat4(1);
 
     struct PerFrameUBOBox {
         glm::mat4 view_proj;
         glm::vec2 screen_resolution;
         float     line_width;
     };
+
+    std::vector<glm::vec3> s_upload_positions;
+    std::vector<glm::vec3> s_upload_colors;
 
     bool EnsureTransferBufferSize(size_t requested_size) {
         if (requested_size > s_transfer_buffer_size) {
@@ -88,26 +91,39 @@ namespace {
 
     bool UploadSphereData(
         SDL_GPUCommandBuffer* command_buffer,
-        std::span<const glm::vec3> sphere_positions,
-        std::span<const glm::vec3> sphere_colors
+        std::span<const glm::dvec3> sphere_positions,
+        std::span<const glm::dvec3> sphere_colors
     ) {
         assert(sphere_positions.size() == sphere_colors.size());
         if(sphere_positions.empty()) {
             return true;
         }
 
-        // Ensure GPU buffer sizes
-        if (!EnsureTransferBufferSize(sphere_positions.size_bytes() + sphere_colors.size_bytes())) return false;
-        if (!EnsureSpheresBufferSize(sphere_positions.size_bytes())) return false;
+        // Convert double precision to float for the GPU vertex buffers.
+        s_upload_positions.resize(sphere_positions.size());
+        s_upload_colors.resize(sphere_colors.size());
+        for (size_t i = 0; i < sphere_positions.size(); ++i) {
+            s_upload_positions[i] = glm::vec3(sphere_positions[i]);
+        }
+        for (size_t i = 0; i < sphere_colors.size(); ++i) {
+            s_upload_colors[i] = glm::vec3(sphere_colors[i]);
+        }
 
-        s_spheres_num = sphere_positions.size();
+        std::span<const glm::vec3> positions = s_upload_positions;
+        std::span<const glm::vec3> colors = s_upload_colors;
+
+        // Ensure GPU buffer sizes
+        if (!EnsureTransferBufferSize(positions.size_bytes() + colors.size_bytes())) return false;
+        if (!EnsureSpheresBufferSize(positions.size_bytes())) return false;
+
+        s_spheres_num = positions.size();
 
         // Populate transfer buffer with positions followed by colors
         void* mapped_mem = SDL_MapGPUTransferBuffer(s_device, s_transfer_buffer, false);
         // Positions
-        memcpy(mapped_mem, sphere_positions.data(), sphere_positions.size_bytes());
+        memcpy(mapped_mem, positions.data(), positions.size_bytes());
         // Colors
-        memcpy(static_cast<std::byte*>(mapped_mem) + sphere_positions.size_bytes(), sphere_colors.data(), sphere_colors.size_bytes());
+        memcpy(static_cast<std::byte*>(mapped_mem) + positions.size_bytes(), colors.data(), colors.size_bytes());
         SDL_UnmapGPUTransferBuffer(s_device, s_transfer_buffer);
 
         // Record the CPU-side copy pass. Actual VRAM transfer is asynchronous.
@@ -120,18 +136,18 @@ namespace {
         SDL_GPUBufferRegion positions_destination = {
             .buffer = s_sphere_positions,
             .offset = 0,
-            .size = static_cast<uint32_t>(sphere_positions.size_bytes())
+            .size = static_cast<uint32_t>(positions.size_bytes())
         };
         SDL_UploadToGPUBuffer(copy_pass, &positions_source, &positions_destination, false);
         // Colors
         SDL_GPUTransferBufferLocation colors_source = {
             .transfer_buffer = s_transfer_buffer,
-            .offset = static_cast<uint32_t>(sphere_positions.size_bytes())
+            .offset = static_cast<uint32_t>(positions.size_bytes())
         };
         SDL_GPUBufferRegion colors_destination = {
             .buffer = s_sphere_colors,
             .offset = 0,
-            .size = static_cast<uint32_t>(sphere_colors.size_bytes())
+            .size = static_cast<uint32_t>(colors.size_bytes())
         };
         SDL_UploadToGPUBuffer(copy_pass, &colors_source, &colors_destination, false);
         SDL_EndGPUCopyPass(copy_pass);
@@ -432,7 +448,7 @@ void RendererShutdown() {
     SDL_Quit();
 }
 
-void RendererSetViewMatrix(const glm::mat4& view) {
+void RendererSetViewMatrix(const glm::dmat4& view) {
     s_view = view;
 }
 
@@ -441,8 +457,8 @@ void RendererImGui(std::function<void()> f) {
 }
 
 void RendererDrawFrame(
-    std::span<const glm::vec3> sphere_positions,
-    std::span<const glm::vec3> sphere_colors
+    std::span<const glm::dvec3> sphere_positions,
+    std::span<const glm::dvec3> sphere_colors
 ) {
     ImDrawData* draw_data = nullptr;
 
@@ -476,7 +492,7 @@ void RendererDrawFrame(
 
     // Resize if needed
     {
-        if (last_swapchain_texture_height != swapchain_texture_width || last_swapchain_texture_height != swapchain_texture_height) {
+        if (last_swapchain_texture_width != swapchain_texture_width || last_swapchain_texture_height != swapchain_texture_height) {
             SDL_GPUTextureCreateInfo depth_texture_create_info = {
                 .type                 = SDL_GPU_TEXTURETYPE_2D,
                 .format               = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
@@ -531,11 +547,11 @@ void RendererDrawFrame(
             &depth_target_info
         );
 
-        glm::mat4 projection = glm::perspective(glm::radians(80.0f), (float)swapchain_texture_width / (float)swapchain_texture_height, 0.1f, 100.0f);
+        glm::dmat4 projection = glm::perspective<double>(glm::radians<double>(80.0), (double)swapchain_texture_width / (double)swapchain_texture_height, 0.1, 100.0);
         PerFrameUBOSpheres ubo = {
-            .view_proj    = projection * s_view,
+            .view_proj    = glm::mat4(projection * s_view),
             .aspect_ratio = (float)swapchain_texture_width / (float)swapchain_texture_height,
-            .radius       = g_ui.particle_radius,
+            .radius       = (float)g_ui.particle_radius,
         };
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(PerFrameUBOSpheres));
 
@@ -552,7 +568,7 @@ void RendererDrawFrame(
         // Box
         SDL_BindGPUGraphicsPipeline(render_pass, s_box_pipeline);
         PerFrameUBOBox box_ubo = {
-            .view_proj         = projection * s_view * glm::translate(glm::mat4(1), g_ui.box_size/2.0f) * glm::scale(glm::mat4(1), g_ui.box_size),
+            .view_proj         = glm::mat4(projection * s_view * glm::translate(glm::dmat4(1), g_ui.box_size/2.0) * glm::scale(glm::dmat4(1), g_ui.box_size)),
             .screen_resolution = glm::vec2(swapchain_texture_width, swapchain_texture_height),
             .line_width        = 4.0f,
         };
