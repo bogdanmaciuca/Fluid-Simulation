@@ -19,6 +19,16 @@ void Grid::Update(std::span<glm::dvec3> positions) {
         m_num[cell_idx]++;
     }
 
+    // Normalize occupancy per cell (relative to the densest cell).
+    m_occupancy.resize(cell_num);
+    uint32_t max_num = 1;
+    for (uint32_t cell = 0; cell < cell_num; cell++) {
+        max_num = std::max(max_num, m_num[cell]);
+    }
+    for (uint32_t cell = 0; cell < cell_num; cell++) {
+        m_occupancy[cell] = static_cast<double>(m_num[cell]) / static_cast<double>(max_num);
+    }
+
     // Exclusive prefix sums (with one guard element at the end).
     m_first.resize(cell_num + 1);
     uint32_t first = 0;

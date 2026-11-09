@@ -34,3 +34,12 @@ std::span<glm::dvec3> PhysicsGetColors() {
     }
 }
 
+std::span<glm::vec4> PhysicsGetGridCells() {
+    if (g_ui.oop) {
+        return PhysicsOOPGetGridCells();
+    }
+    else {
+        return PhysicsDODGetGridCells();
+    }
+}
+

@@ -8,8 +8,12 @@ void RendererShutdown();
 
 void RendererSetViewMatrix(const glm::dmat4& view);
 void RendererImGui(std::function<void()> f);
-void RendererDrawFrame(
-    std::span<const glm::dvec3> sphere_positions,
-    std::span<const glm::dvec3> sphere_colors
-);
+
+struct RendererFrameData {
+    std::span<const glm::vec4>  grid_cells;
+    std::span<const glm::dvec3> sphere_positions;
+    std::span<const glm::dvec3> sphere_colors;
+};
+
+void RendererDrawFrame(const RendererFrameData& frame_data);
 

@@ -14,9 +14,6 @@ int main() {
 
     PhysicsInit();
 
-    const glm::dvec3 obstacle_position(-100.0);
-    const double     obstacle_radius = 0.15;
-
     Camera camera(glm::dvec3(
         g_ui.box_size.x * 0.5,
         g_ui.box_size.y * 0.5,
@@ -30,7 +27,6 @@ int main() {
         SDL_MouseButtonFlags mouse_flags = SDL_GetRelativeMouseState(&dx, &dy);
         if (!ImGui::GetIO().WantCaptureMouse && (mouse_flags & SDL_BUTTON_LMASK)) {
             camera.ProcessMouseMovement(dx, -dy);
-            // ProcessMouseScroll(float yoffset); // TODO maybe
         }
 
         if      (keyboard[SDL_SCANCODE_W]) { camera.ProcessKeyboard(CameraMovement::Forward,  delta_time); }
@@ -41,7 +37,11 @@ int main() {
         // g_ui.particle_num = PhysicsGetParticleNum();
 
         RendererSetViewMatrix(camera.GetViewMatrix());
-        RendererDrawFrame(PhysicsGetPositions(), PhysicsGetColors());
+        RendererDrawFrame({
+            .grid_cells       = PhysicsGetGridCells(),
+            .sphere_positions = PhysicsGetPositions(),
+            .sphere_colors    = PhysicsGetColors(),
+        });
     };
 
     const auto fixed_update = [&](double timestep) {
@@ -57,4 +57,3 @@ int main() {
     RendererShutdown();
     return 0;
 }
-

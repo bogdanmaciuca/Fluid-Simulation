@@ -17,8 +17,31 @@ namespace {
     Grid                  s_grid;
 
     std::vector<dvec3>    s_colors;
+    std::vector<glm::vec4> s_grid_cells;
 
     uint64_t              s_neighbor_checks = 0;
+
+    void BuildGridCells() {
+        ivec3 size = s_grid.GetSize();
+        auto occupancy = s_grid.GetOccupancy();
+
+        s_grid_cells.clear();
+        s_grid_cells.reserve(size.x * size.y * size.z);
+
+        for (int z = 0; z < size.z; ++z) {
+            for (int y = 0; y < size.y; ++y) {
+                for (int x = 0; x < size.x; ++x) {
+                    uint32_t idx = s_grid.CellIdx(ivec3(x, y, z));
+                    glm::vec3 center(
+                        (x + 0.5) * CELL_SIZE,
+                        (y + 0.5) * CELL_SIZE,
+                        (z + 0.5) * CELL_SIZE
+                    );
+                    s_grid_cells.emplace_back(center, static_cast<float>(occupancy[idx]));
+                }
+            }
+        }
+    }
 
     void ResetParticles() {
         double spacing = std::cbrt(PARTICLE_MASS / REST_DENSITY);
@@ -183,6 +206,7 @@ void PhysicsDODUpdate(double dt) {
     { Timer t("Forces");          ComputeForces(); }
     { Timer t("Integrate");       Integrate(dt); }
     { Timer t("Colors");          ComputeColors(); }
+    BuildGridCells();
 
     std::cout << (double)s_neighbor_checks / s_num << "\n";
 }
@@ -193,5 +217,9 @@ std::span<dvec3> PhysicsDODGetPositions() {
 
 std::span<dvec3> PhysicsDODGetColors() {
     return s_colors;
+}
+
+std::span<glm::vec4> PhysicsDODGetGridCells() {
+    return s_grid_cells;
 }
 

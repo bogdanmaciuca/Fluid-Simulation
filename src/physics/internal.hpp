@@ -5,12 +5,14 @@ void PhysicsDODInit();
 void PhysicsDODUpdate(double dt);
 std::span<glm::dvec3> PhysicsDODGetPositions();
 std::span<glm::dvec3> PhysicsDODGetColors();
+std::span<glm::vec4> PhysicsDODGetGridCells();
 
 // OOP
 void PhysicsOOPInit();
 void PhysicsOOPUpdate(double dt);
 std::span<glm::dvec3> PhysicsOOPGetPositions();
 std::span<glm::dvec3> PhysicsOOPGetColors();
+std::span<glm::vec4> PhysicsOOPGetGridCells();
 
 // Utilities
 constexpr double CELL_SIZE = 0.1;
@@ -29,6 +31,7 @@ constexpr double TAIT_COEF = (SPEED_OF_SOUND * SPEED_OF_SOUND * REST_DENSITY) / 
 struct Grid {
     void Update(std::span<glm::dvec3> positions);
     std::span<uint32_t> GetCellParticleIDs(uint32_t cell_idx);
+    std::span<const double> GetOccupancy() const { return m_occupancy; }
 
     glm::ivec3 GetSize() { return m_size; }
     uint32_t GetStrideY() { return m_stride_y; }
@@ -55,6 +58,8 @@ private:
     std::vector<uint32_t> m_first;
     // Number of particles in cell
     std::vector<uint32_t> m_num;
+    // Normalized occupancy (0..1) per cell
+    std::vector<double> m_occupancy;
     // Cached belonging cell for each particle
     std::vector<uint32_t> m_cell_idx;
 

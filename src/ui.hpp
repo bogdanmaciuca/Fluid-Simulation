@@ -2,6 +2,7 @@
 
 inline struct UIData {
     uint32_t   particle_num    = 0;
+    float      grid_cube_size  = 0.1f;
 
     double     speed           = 1.0;
     double     particle_radius = 0.01;

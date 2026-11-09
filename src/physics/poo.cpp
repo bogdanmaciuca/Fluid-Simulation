@@ -16,3 +16,7 @@ std::span<glm::dvec3> PhysicsOOPGetColors() {
 
 }
 
+std::span<glm::vec4> PhysicsOOPGetGridCells() {
+    return {};
+}
+
