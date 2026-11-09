@@ -3,6 +3,7 @@
 // DOD
 void PhysicsDODInit();
 void PhysicsDODUpdate(double dt);
+uint32_t PhysicsDODGetParticleNum();
 std::span<glm::dvec3> PhysicsDODGetPositions();
 std::span<glm::dvec3> PhysicsDODGetColors();
 std::span<glm::vec4> PhysicsDODGetGridCells();
@@ -10,6 +11,7 @@ std::span<glm::vec4> PhysicsDODGetGridCells();
 // OOP
 void PhysicsOOPInit();
 void PhysicsOOPUpdate(double dt);
+uint32_t PhysicsOOPGetParticleNum();
 std::span<glm::dvec3> PhysicsOOPGetPositions();
 std::span<glm::dvec3> PhysicsOOPGetColors();
 std::span<glm::vec4> PhysicsOOPGetGridCells();

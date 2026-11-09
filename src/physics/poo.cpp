@@ -8,6 +8,10 @@ void PhysicsOOPUpdate(double dt) {
 
 }
 
+uint32_t PhysicsOOPGetParticleNum() {
+    return 0;
+}
+
 std::span<glm::dvec3> PhysicsOOPGetPositions() {
 
 }

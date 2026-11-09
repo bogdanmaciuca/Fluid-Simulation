@@ -1,5 +1,6 @@
 #include "ui.hpp"
 #include "timer.hpp"
+#include "physics/physics.hpp"
 
 void UIDrawFrame() {
     auto& io = ImGui::GetIO();
@@ -16,7 +17,8 @@ void UIDrawFrame() {
     ImGui::Begin("Control Panel");
 
     ImGui::Checkbox("OOP", &g_ui.oop);
-    ImGui::Text("Particles: %u", g_ui.particle_num);
+    ImGui::Checkbox("Render grid", &g_ui.render_grid);
+    ImGui::Text("Particles: %u", PhysicsGetParticleNum());
     ImGui::Separator();
 
     {

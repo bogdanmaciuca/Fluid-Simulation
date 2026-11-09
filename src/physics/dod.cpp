@@ -47,11 +47,13 @@ namespace {
         double spacing = std::cbrt(PARTICLE_MASS / REST_DENSITY);
         ivec3 count = g_ui.box_size / spacing / 1.2;
         s_num = count.x * count.y * count.z;
-        // s_pos.resize(s_num);
+        s_pos.clear();
+        s_pos.reserve(s_num);
         s_vel.assign(s_num, dvec3(0));
         s_acc.assign(s_num, dvec3(0));
         s_dens.resize(s_num);
         s_pres.resize(s_num);
+        s_colors.assign(s_num, dvec3(0));
 
         for (int z = 0; z < count.z; ++z) {
             for (int y = 0; y < count.y; ++y) {
@@ -209,6 +211,10 @@ void PhysicsDODUpdate(double dt) {
     BuildGridCells();
 
     std::cout << (double)s_neighbor_checks / s_num << "\n";
+}
+
+uint32_t PhysicsDODGetParticleNum() {
+    return s_num;
 }
 
 std::span<dvec3> PhysicsDODGetPositions() {

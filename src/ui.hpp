@@ -5,12 +5,13 @@ inline struct UIData {
     float      grid_cube_size  = 0.1f;
 
     double     speed           = 1.0;
-    double     particle_radius = 0.01;
-    glm::dvec3 box_size        = glm::dvec3(1.0, 1.0, 1.0);
+    double     particle_radius = 0.025;
+    glm::dvec3 box_size        = glm::dvec3(1.5, 1.0, 1.5);
     double     gravity         = 0.0; //-9.81;
-    double     viscosity       = 0.1;
+    double     viscosity       = 0.2;
     double     restitution     = 0.5;
     bool       oop             = false;
+    bool       render_grid     = true;
 } g_ui;
 
 void UIDrawFrame();

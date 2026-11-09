@@ -34,11 +34,9 @@ int main() {
         if      (keyboard[SDL_SCANCODE_A]) { camera.ProcessKeyboard(CameraMovement::Left,     delta_time); }
         else if (keyboard[SDL_SCANCODE_D]) { camera.ProcessKeyboard(CameraMovement::Right,    delta_time); }
 
-        // g_ui.particle_num = PhysicsGetParticleNum();
-
         RendererSetViewMatrix(camera.GetViewMatrix());
         RendererDrawFrame({
-            .grid_cells       = PhysicsGetGridCells(),
+            .grid_cells       = g_ui.render_grid ? PhysicsGetGridCells() : std::span<glm::vec4>{},
             .sphere_positions = PhysicsGetPositions(),
             .sphere_colors    = PhysicsGetColors(),
         });

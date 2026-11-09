@@ -16,6 +16,15 @@ void PhysicsUpdate(double dt) {
     }
 }
 
+uint32_t PhysicsGetParticleNum() {
+    if (g_ui.oop) {
+        return PhysicsOOPGetParticleNum();
+    }
+    else {
+        return PhysicsDODGetParticleNum();
+    }
+}
+
 std::span<glm::dvec3> PhysicsGetPositions() {
     if (g_ui.oop) {
         return PhysicsOOPGetPositions();
