@@ -1,64 +1,96 @@
 #pragma once
 
 namespace gpu {
+    /*
+    * Initializes a GPU device, claims a window for it and
+    * initializes glslang
+    * `Context` must be constructed before any GPU objects are created and
+    * destroyed after all GPU objects are released.
+    */
     struct Context {
         Context(SDL_Window* window);
         ~Context();
+
+        Context(const Context&) = delete;
+        Context& operator=(const Context&) = delete;
+        Context(Context&&) = delete;
+        Context& operator=(Context&&) = delete;
+
+        static SDL_GPUDevice* GetDevice() { return s_device; }
+    private:
+        inline static bool           s_is_init    = false;
+        inline static SDL_GPUDevice* s_device     = nullptr;
+        inline static SDL_Window*    s_window_ptr = nullptr;
     };
 
-    struct Buffer {
-        Buffer(const SDL_GPUBufferCreateInfo& create_info);
-        ~Buffer();
-
-        Buffer(Buffer&& other);
-        Buffer& operator=(Buffer&& other);
-
-        Buffer(const Buffer&) = delete;
-        Buffer& operator=(const Buffer&) = delete;
-
-        void Resize(u32 new_size);
-        SDL_GPUBuffer* Ptr() { return m_ptr; };
-    private:
-        SDL_GPUBuffer* m_ptr   = nullptr;
-        u32            m_size  = 0;
-        u32            m_usage = 0;
-    };
-
-    template<typename T>
-    struct Texture {
-        Texture(const SDL_GPUTextureCreateInfo& create_info);
-        ~Texture();
-
-        Texture(Texture&&);
-        Texture& operator=(Texture&&);
-
-        Texture(const Texture&) = delete;
-        Texture& operator=(const Texture&) = delete;
-
-        void Resize(u32 new_size);
-        SDL_GPUTexture* Ptr();
-    private:
-        consteval SDL_GPUTextureFormat FormatFromType(auto v) {
-            if constexpr (std::is_same_v<T, float>) return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-            if constexpr (std::is_same_v<T, Vec4>)  return SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+    template <
+        typename Handle,
+        typename Info,
+        Handle* (*Create)(SDL_GPUDevice*, const Info*),
+        void    (*Release)(SDL_GPUDevice*, Handle*)
+    >
+    struct Resource {
+        Resource(const Info& create_info) {
+            m_ptr = Create(GetDevice(), &create_info);
+            assert(m_ptr != nullptr);
         }
-        glm::ivec3 m_size;
-        glm::ivec3 m_capacity;
+
+        ~Resource() {
+            if (m_ptr != nullptr) {
+                Release(GetDevice(), m_ptr);
+            }
+        }
+
+        Resource(Resource&& other) noexcept : m_ptr(other.m_ptr) {
+            other.m_ptr = nullptr;
+        }
+
+        Resource& operator=(Resource&& other) noexcept {
+            if (this != &other) {
+                if (m_ptr != nullptr) {
+                    Release(GetDevice(), m_ptr);
+                }
+                m_ptr       = other.m_ptr;
+                other.m_ptr = nullptr;
+            }
+            return *this;
+        }
+
+        Resource(const Resource&) = delete;
+        Resource& operator=(const Resource&) = delete;
+
+        Handle* Ptr() { return m_ptr; }
+
+    protected:
+        Handle* m_ptr = nullptr; // SDL handle
     };
 
-    struct TransferBuffer {
-        TransferBuffer(const SDL_GPUTransferBufferCreateInfo& create_info);
-        ~TransferBuffer();
+    struct Buffer : Resource<
+        SDL_GPUBuffer,
+        SDL_GPUBufferCreateInfo,
+        SDL_CreateGPUBuffer,
+        SDL_ReleaseGPUBuffer
+    > {
+        using Resource::Resource;
+    };
 
-        TransferBuffer(TransferBuffer&&);
-        TransferBuffer& operator=(TransferBuffer&&);
+    struct Texture : Resource<
+        SDL_GPUTexture,
+        SDL_GPUTextureCreateInfo,
+        SDL_CreateGPUTexture,
+        SDL_ReleaseGPUTexture
+    > {
+        using Resource::Resource;
+    };
 
-        TransferBuffer(const TransferBuffer&) = delete;
-        TransferBuffer& operator=(const TransferBuffer&) = delete;
+    struct TransferBuffer : Resource<
+        SDL_GPUTransferBuffer,
+        SDL_GPUTransferBufferCreateInfo,
+        SDL_CreateGPUTransferBuffer,
+        SDL_ReleaseGPUTransferBuffer
+    > {
+        using Resource::Resource;
 
-        void Resize(u32 new_size);
-        SDL_GPUBuffer* Ptr();
-        void Stage(std::function<void(void* mem)> f);
+        void Map(std::function<void(void* mem)> f);
     };
 }
-
