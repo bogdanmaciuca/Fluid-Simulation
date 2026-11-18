@@ -10,16 +10,12 @@
 // - vec3  vorticity
 // - vec3  color
 
-inline struct {
+inline struct Globals {
     SDL_Window*              window;
     SDL_GPUDevice*           device;
-
-    // SoA for particle data
-    //
-    SDL_GPUBuffer* ssbo;
-
-    // Given an SSBO with the correct format, it will pull from it the vertices it needs
+    SDL_GPUBuffer*           ssbo;
     SDL_GPUGraphicsPipeline* circles_pipeline;
+    SDL_GPUTexture*          depth_texture;
     SDL_GPUGraphicsPipeline* box_pipeline;
 
     ImGuiIO* io;
