@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(Fluids LANGUAGES CXX)
+project(Fluids LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,6 +50,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glslang)
 
+# SPIRV-Reflect
+set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "Don't build spirv-reflect CLI" FORCE)
+set(SPIRV_REFLECT_STATIC_LIB ON  CACHE BOOL "Build SPIRV-Reflect static library" FORCE)
+set(SPIRV_REFLECT_SHARED_LIB OFF CACHE BOOL "" FORCE)
+set(SPIRV_REFLECT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SPIRV_REFLECT_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    spirv_reflect
+    GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Reflect.git
+    GIT_TAG        vulkan-sdk-1.4.363.0
+)
+FetchContent_MakeAvailable(spirv_reflect)
+
 add_executable(${PROJECT_NAME} ${SRCS})
 
 target_precompile_headers(${PROJECT_NAME} PUBLIC src/pch.hpp)
@@ -65,6 +78,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     glslang::glslang
     glslang::glslang-default-resource-limits
     glslang::SPIRV
+    spirv-reflect-static
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE vendor/imgui)
