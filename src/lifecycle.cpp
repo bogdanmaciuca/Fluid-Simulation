@@ -7,6 +7,14 @@ constexpr u32 DEFAULT_WND_W = 1200;
 constexpr u32 DEFAULT_WND_H = 800;
 
 namespace {
+    void InitializeTransferBuffer() {
+        SDL_GPUTransferBufferCreateInfo create_info = {
+            .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+            .size = SSBO_SIZE
+        };
+        globals.transfer_buffer = SDL_CreateGPUTransferBuffer(globals.device, &create_info);
+    }
+
     void InitializeSSBO() {
         SDL_GPUBufferUsageFlags usage = 
             SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
@@ -115,6 +123,9 @@ namespace {
 void Initialize() {
     InitializeSDL();
     InitializeImGui();
+    InitializeTransferBuffer();
+    InitializeSSBO();
+    globals.depth_texture = CreateDepthTexture(DEFAULT_WND_W, DEFAULT_WND_H);
     // InitialiazeCirclesPipeline();
     // InitializeBoxPipeline();
 }
@@ -124,7 +135,9 @@ void Shutdown() {
 
     SDL_ReleaseGPUGraphicsPipeline(g.device, g.box_pipeline);
     SDL_ReleaseGPUGraphicsPipeline(g.device, g.circles_pipeline);
+    SDL_ReleaseGPUTexture(g.device, g.depth_texture);
     SDL_ReleaseGPUBuffer(g.device, g.ssbo);
+    SDL_ReleaseGPUTransferBuffer(g.device, g.transfer_buffer);
     ShutdownImGui();
     ShutdownSDL();
 }

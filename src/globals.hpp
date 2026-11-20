@@ -1,21 +1,12 @@
 #pragma once
 
-// SSBO
-// Arrays:
-// - vec3  position
-// - vec3  predicted_position
-// - vec3  velocity
-// - float density
-// - float lambda
-// - vec3  vorticity
-// - vec3  color
-
 inline struct Globals {
     SDL_Window*              window;
     SDL_GPUDevice*           device;
+    SDL_GPUTransferBuffer*   transfer_buffer;
     SDL_GPUBuffer*           ssbo;
-    SDL_GPUGraphicsPipeline* circles_pipeline;
     SDL_GPUTexture*          depth_texture;
+    SDL_GPUGraphicsPipeline* circles_pipeline;
     SDL_GPUGraphicsPipeline* box_pipeline;
 
     ImGuiIO* io;
@@ -33,7 +24,7 @@ constexpr size_t PARTICLE_BYTE_SIZE =
     sizeof(vec3)  + // velocity
     sizeof(float) + // density
     sizeof(float) + // lambda
-    sizeof(vec3)  + // voriticity
+    sizeof(vec3)  + // vorticity
     sizeof(vec3);   // color
 
 constexpr size_t PARTICLE_MAX_NUM = 100'000;

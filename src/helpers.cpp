@@ -155,3 +155,38 @@ SDL_GPUTexture* CreateDepthTexture(u32 w, u32 h) {
     return depth_texture;
 }
 
+void UploadToBuffer(SDL_GPUCommandBuffer* command_buffer, SDL_GPUBuffer* buffer, std::span<BufferUploadData> upload_data) {
+    auto& g = globals;
+
+    struct BufferUploadSdlData {
+        SDL_GPUBufferRegion           dst;
+        SDL_GPUTransferBufferLocation src;
+    };
+
+    byte* mem = (byte*)SDL_MapGPUTransferBuffer(g.device, g.transfer_buffer, false);
+    assert(mem != nullptr);
+
+    std::vector<BufferUploadSdlData> uploads;
+    uploads.reserve(upload_data.size());
+
+    size_t offset = 0;
+    for (const auto& data : upload_data) {
+        assert(offset + data.data.size() <= SSBO_SIZE);
+        memcpy(mem + offset, data.data.data(), data.data.size_bytes());
+
+        BufferUploadSdlData upload = {};
+        upload.src = { .transfer_buffer = g.transfer_buffer, .offset = (u32)offset };
+        upload.dst = { .buffer = buffer, .offset = data.offset, .size = (u32)data.data.size() };
+        uploads.push_back(upload);
+
+        offset += data.data.size();
+    }
+    SDL_UnmapGPUTransferBuffer(g.device, g.transfer_buffer);
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
+    for (const auto& upload : uploads) {
+        SDL_UploadToGPUBuffer(copy_pass, &upload.src, &upload.dst, false);
+    }
+    SDL_EndGPUCopyPass(copy_pass);
+}
+

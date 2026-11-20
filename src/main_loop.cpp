@@ -1,5 +1,7 @@
 #include "main_loop.hpp"
+
 #include "globals.hpp"
+#include "helpers.hpp"
 
 void MainLoop(const MainLoopCallbacks& callbacks) {
     auto& g = globals;
@@ -60,6 +62,15 @@ void MainLoop(const MainLoopCallbacks& callbacks) {
             SDL_GPUTexture* swapchain_texture;
             u32 swapchain_texture_width, swapchain_texture_height;
             SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, g.window, &swapchain_texture, &swapchain_texture_width, &swapchain_texture_height);
+
+            // Resize depth texture if needed
+            static u32 last_swapchain_texture_width = swapchain_texture_width;
+            static u32 last_swapchain_texture_height = swapchain_texture_height;
+            if (last_swapchain_texture_width != swapchain_texture_width || last_swapchain_texture_height != swapchain_texture_height) {
+                SDL_ReleaseGPUTexture(g.device, g.depth_texture);
+                g.depth_texture = CreateDepthTexture(swapchain_texture_width, swapchain_texture_height);
+            }
+
             if (swapchain_texture) {
                 callbacks.render(command_buffer, swapchain_texture, swapchain_texture_width, swapchain_texture_height);
             }
