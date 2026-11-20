@@ -228,6 +228,10 @@ bool GPUComputePipelineEx::RebuildPipeline() {
         return false;
     }
 
+    m_thread_count_x = data.threadcount_x;
+    m_thread_count_y = data.threadcount_y;
+    m_thread_count_z = data.threadcount_z;
+
     m_pipeline = GPUComputePipeline(pipeline, GPUResourceDeleter{ m_device });
     return true;
 }
@@ -250,18 +254,18 @@ void GPUComputePipelineEx::SetBindings(
     m_buffer_bindings.assign(buffers.begin(), buffers.end());
 }
 
-void GPUComputePipelineEx::SetGroupcount(u32 x, u32 y, u32 z) {
-    m_groupcount_x = x;
-    m_groupcount_y = y;
-    m_groupcount_z = z;
-}
-
-void GPUComputePipelineEx::DispatchAsPass(SDL_GPUCommandBuffer* command_buffer) const {
+void GPUComputePipelineEx::DispatchAsPass(
+    SDL_GPUCommandBuffer* command_buffer, u32 work_x, u32 work_y, u32 work_z) const {
     SDL_GPUComputePass* compute_pass = SDL_BeginGPUComputePass(
         command_buffer,
         m_texture_bindings.data(), static_cast<Uint32>(m_texture_bindings.size()),
         m_buffer_bindings.data(), static_cast<Uint32>(m_buffer_bindings.size()));
     SDL_BindGPUComputePipeline(compute_pass, m_pipeline.get());
-    SDL_DispatchGPUCompute(compute_pass, m_groupcount_x, m_groupcount_y, m_groupcount_z);
+
+    u32 groupcount_x = (work_x + m_thread_count_x - 1) / m_thread_count_x;
+    u32 groupcount_y = (work_y + m_thread_count_y - 1) / m_thread_count_y;
+    u32 groupcount_z = (work_z + m_thread_count_z - 1) / m_thread_count_z;
+    SDL_DispatchGPUCompute(compute_pass, groupcount_x, groupcount_y, groupcount_z);
+
     SDL_EndGPUComputePass(compute_pass);
 }

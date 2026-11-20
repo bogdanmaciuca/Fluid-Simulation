@@ -3,8 +3,6 @@
 constexpr u32 TEXTURE_WIDTH  = 1200;
 constexpr u32 TEXTURE_HEIGHT = 800;
 
-constexpr u32 COMPUTE_LOCAL_SIZE = 8;
-
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -37,19 +35,17 @@ int main() {
     });
 
     GPUComputePipelineEx compute(device, "shaders/compute.comp");
-    std::array texture_bindings = {
-        SDL_GPUStorageTextureReadWriteBinding{
-            .texture = texture.get(),
-            .mip_level = 0,
-            .layer = 0,
-            .cycle = false,
-        }
-    };
-    compute.SetBindings(texture_bindings, {});
-    compute.SetGroupcount(
-        TEXTURE_WIDTH / COMPUTE_LOCAL_SIZE,
-        TEXTURE_HEIGHT / COMPUTE_LOCAL_SIZE,
-        1);
+    compute.SetBindings(
+        std::array{
+            SDL_GPUStorageTextureReadWriteBinding{
+                .texture = texture.get(),
+                .mip_level = 0,
+                .layer = 0,
+                .cycle = false,
+            }
+        },
+        {}
+    );
 
     GPUShader vs = CreateGPUShader(device, "shaders/fullscreen.vert");
     GPUShader fs = CreateGPUShader(device, "shaders/fullscreen.frag");
@@ -100,7 +96,7 @@ int main() {
             command_buffer, window, &swapchain_texture, &swapchain_texture_width, &swapchain_texture_height);
 
         if (swapchain_texture != nullptr) {
-            compute.DispatchAsPass(command_buffer);
+            compute.DispatchAsPass(command_buffer, TEXTURE_WIDTH, TEXTURE_HEIGHT, 1);
 
             SDL_GPUColorTargetInfo color_target = {
                 .texture     = swapchain_texture,

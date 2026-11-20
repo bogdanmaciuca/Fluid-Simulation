@@ -67,8 +67,7 @@ public:
     void SetBindings(
         std::span<const SDL_GPUStorageTextureReadWriteBinding> textures,
         std::span<const SDL_GPUStorageBufferReadWriteBinding> buffers);
-    void SetGroupcount(u32 x, u32 y, u32 z);
-    void DispatchAsPass(SDL_GPUCommandBuffer* command_buffer) const;
+    void DispatchAsPass(SDL_GPUCommandBuffer* command_buffer, u32 work_x, u32 work_y, u32 work_z) const;
 
 private:
     bool RebuildPipeline();
@@ -81,7 +80,8 @@ private:
     std::vector<SDL_GPUStorageTextureReadWriteBinding> m_texture_bindings;
     std::vector<SDL_GPUStorageBufferReadWriteBinding> m_buffer_bindings;
 
-    u32 m_groupcount_x = 1;
-    u32 m_groupcount_y = 1;
-    u32 m_groupcount_z = 1;
+    u32 m_thread_count_x = 1;
+    u32 m_thread_count_y = 1;
+    u32 m_thread_count_z = 1;
 };
+
