@@ -1,9 +1,13 @@
 #pragma once
 
-struct GPUResourceDeleter {
+struct ResourceDeleter {
     SDL_GPUDevice* device = nullptr;
 
+    void operator()(SDL_Window* ptr) const {
+        SDL_DestroyWindow(ptr);
+    }
     void operator()(SDL_GPUDevice* ptr) const {
+        SDL_WaitForGPUIdle(ptr);
         SDL_DestroyGPUDevice(ptr);
     }
     void operator()(SDL_GPUBuffer* ptr) const {
@@ -26,13 +30,14 @@ struct GPUResourceDeleter {
     }
 };
 
-using GPUDevice           = std::unique_ptr<SDL_GPUDevice, GPUResourceDeleter>;
-using GPUBuffer           = std::unique_ptr<SDL_GPUBuffer, GPUResourceDeleter>;
-using GPUComputePipeline  = std::unique_ptr<SDL_GPUComputePipeline, GPUResourceDeleter>;
-using GPUGraphicsPipeline = std::unique_ptr<SDL_GPUGraphicsPipeline, GPUResourceDeleter>;
-using GPUShader           = std::unique_ptr<SDL_GPUShader, GPUResourceDeleter>;
-using GPUTexture          = std::unique_ptr<SDL_GPUTexture, GPUResourceDeleter>;
-using GPUSampler          = std::unique_ptr<SDL_GPUSampler, GPUResourceDeleter>;
+using Window              = std::unique_ptr<SDL_Window, ResourceDeleter>;
+using GPUDevice           = std::unique_ptr<SDL_GPUDevice, ResourceDeleter>;
+using GPUBuffer           = std::unique_ptr<SDL_GPUBuffer, ResourceDeleter>;
+using GPUComputePipeline  = std::unique_ptr<SDL_GPUComputePipeline, ResourceDeleter>;
+using GPUGraphicsPipeline = std::unique_ptr<SDL_GPUGraphicsPipeline, ResourceDeleter>;
+using GPUShader           = std::unique_ptr<SDL_GPUShader, ResourceDeleter>;
+using GPUTexture          = std::unique_ptr<SDL_GPUTexture, ResourceDeleter>;
+using GPUSampler          = std::unique_ptr<SDL_GPUSampler, ResourceDeleter>;
 
 struct ReflectionData {
     u32 num_samplers;
@@ -49,6 +54,7 @@ struct ReflectionData {
 std::vector<u32> CompileShader(const std::string& path);
 ReflectionData ReflectShader(std::span<u32> spirv_code);
 
+Window CreateWindow(const std::string& title, int w, int h);
 GPUDevice CreateGPUDevice();
 GPUBuffer CreateGPUBuffer(const GPUDevice& device, const SDL_GPUBufferCreateInfo& create_info);
 GPUComputePipeline CreateGPUComputePipeline(const GPUDevice& device, const SDL_GPUComputePipelineCreateInfo& create_info);

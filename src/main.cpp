@@ -6,11 +6,11 @@ constexpr u32 TEXTURE_HEIGHT = 800;
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_Window* window = SDL_CreateWindow("Fluid Simulation", TEXTURE_WIDTH, TEXTURE_HEIGHT, SDL_WINDOW_RESIZABLE);
+    Window window = CreateWindow("Fluid Simulation", 1200, 800);
     assert(window != nullptr);
 
     GPUDevice device = CreateGPUDevice();
-    SDL_ClaimWindowForGPUDevice(device.get(), window);
+    SDL_ClaimWindowForGPUDevice(device.get(), window.get());
 
     GPUTexture texture = CreateGPUTexture(device, {
         .type                 = SDL_GPU_TEXTURETYPE_2D,
@@ -52,7 +52,7 @@ int main() {
 
     std::array color_targets = {
         SDL_GPUColorTargetDescription{
-            .format = SDL_GetGPUSwapchainTextureFormat(device.get(), window)
+            .format = SDL_GetGPUSwapchainTextureFormat(device.get(), window.get())
         }
     };
 
@@ -93,7 +93,7 @@ int main() {
         SDL_GPUTexture* swapchain_texture = nullptr;
         u32 swapchain_texture_width, swapchain_texture_height;
         SDL_WaitAndAcquireGPUSwapchainTexture(
-            command_buffer, window, &swapchain_texture, &swapchain_texture_width, &swapchain_texture_height);
+            command_buffer, window.get(), &swapchain_texture, &swapchain_texture_width, &swapchain_texture_height);
 
         if (swapchain_texture != nullptr) {
             compute.DispatchAsPass(command_buffer, TEXTURE_WIDTH, TEXTURE_HEIGHT, 1);
@@ -122,9 +122,8 @@ int main() {
         SDL_SubmitGPUCommandBuffer(command_buffer);
     }
 
-    SDL_WaitForGPUIdle(device.get());
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    SDL_ReleaseWindowFromGPUDevice(device.get(), window.get());
 
     return 0;
 }
+
