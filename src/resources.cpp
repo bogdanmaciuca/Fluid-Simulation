@@ -2,7 +2,7 @@
 
 #include "util.hpp"
 
-std::vector<u32> CompileShader(const std::string& path, const ShaderDefineVector& defines) {
+std::vector<u32> CompileShader(const std::string& path, EShLanguage stage, const ShaderDefineVector& defines) {
     // Initialize glslang on first call of CompileShader()
     static auto do_once = std::invoke([]() {
         bool success = glslang::InitializeProcess();
@@ -10,15 +10,6 @@ std::vector<u32> CompileShader(const std::string& path, const ShaderDefineVector
         return 0;
     });
 
-    const auto stage_from_path = [](const std::string& path) {
-        if (path.ends_with(".vert")) return EShLangVertex;
-        if (path.ends_with(".frag")) return EShLangFragment;
-        if (path.ends_with(".comp")) return EShLangCompute;
-        assert(false && "Unknown shader extension");
-        return EShLangVertex;
-    };
-
-    const EShLanguage stage = stage_from_path(path);
     std::string source = ReadFile(path);
     const char* c_source = source.c_str();
 
@@ -165,7 +156,7 @@ namespace {
 }
 
 GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines) {
-    std::vector<u32> code = CompileShader(path, defines);
+    std::vector<u32> code = CompileShader(path, EShLangCompute, defines);
     assert(!code.empty());
     ReflectionData data = ReflectShader(code);
     return CreateGPUComputePipeline(device, MakeComputePipelineCreateInfo(code, data));
@@ -177,21 +168,27 @@ GPUGraphicsPipeline CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_G
     return GPUGraphicsPipeline(pipeline, ResourceDeleter{ device });
 }
 
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info) {
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info, const ShaderDefineVector& defines) {
     auto shader = SDL_CreateGPUShader(device, &create_info);
     assert(shader != nullptr);
     return GPUShader(shader, ResourceDeleter{ device });
 }
 
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path) {
-    const auto stage_from_path = [](const std::string& path) {
-        if (path.ends_with(".vert")) return SDL_GPU_SHADERSTAGE_VERTEX;
-        if (path.ends_with(".frag")) return SDL_GPU_SHADERSTAGE_FRAGMENT;
-        assert(false && "Unknown shader extension");
-        return SDL_GPU_SHADERSTAGE_VERTEX;
-    };
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines) {
+    SDL_GPUShaderStage sdl_stage;
+    EShLanguage glslang_stage;
 
-    std::vector<u32> code = CompileShader(path);
+    if (path.ends_with(".vert")) {
+        return CreateGPUShaderVertex(device, path);
+    }
+    else if (path.ends_with(".frag")) {
+        return CreateGPUShaderFragment(device, path);
+    }
+    else {
+        assert(false && "Cannot deduce shader type from this extension!");
+    }
+
+    std::vector<u32> code = CompileShader(path, glslang_stage, defines);
     assert(!code.empty());
     ReflectionData data = ReflectShader(code);
 
@@ -200,7 +197,45 @@ GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path) {
         .code                 = reinterpret_cast<const Uint8*>(code.data()),
         .entrypoint           = "main",
         .format               = SDL_GPU_SHADERFORMAT_SPIRV,
-        .stage                = stage_from_path(path),
+        .stage                = sdl_stage,
+        .num_samplers         = data.num_samplers,
+        .num_storage_textures = data.num_readonly_storage_textures + data.num_readwrite_storage_textures,
+        .num_storage_buffers  = data.num_readonly_storage_buffers + data.num_readwrite_storage_buffers,
+        .num_uniform_buffers  = data.num_uniform_buffers,
+    };
+    return CreateGPUShader(device, create_info);
+}
+
+GPUShader CreateGPUShaderVertex(SDL_GPUDevice* device, const std::string& path) {
+    std::vector<u32> code = CompileShader(path, EShLangVertex, {{"VS", ""}});
+    assert(!code.empty());
+    ReflectionData data = ReflectShader(code);
+
+    SDL_GPUShaderCreateInfo create_info = {
+        .code_size            = code.size() * sizeof(u32),
+        .code                 = reinterpret_cast<const Uint8*>(code.data()),
+        .entrypoint           = "main",
+        .format               = SDL_GPU_SHADERFORMAT_SPIRV,
+        .stage                = SDL_GPU_SHADERSTAGE_VERTEX,
+        .num_samplers         = data.num_samplers,
+        .num_storage_textures = data.num_readonly_storage_textures + data.num_readwrite_storage_textures,
+        .num_storage_buffers  = data.num_readonly_storage_buffers + data.num_readwrite_storage_buffers,
+        .num_uniform_buffers  = data.num_uniform_buffers,
+    };
+    return CreateGPUShader(device, create_info);
+}
+
+GPUShader CreateGPUShaderFragment(SDL_GPUDevice* device, const std::string& path) {
+    std::vector<u32> code = CompileShader(path, EShLangFragment, {{"FS", ""}});
+    assert(!code.empty());
+    ReflectionData data = ReflectShader(code);
+
+    SDL_GPUShaderCreateInfo create_info = {
+        .code_size            = code.size() * sizeof(u32),
+        .code                 = reinterpret_cast<const Uint8*>(code.data()),
+        .entrypoint           = "main",
+        .format               = SDL_GPU_SHADERFORMAT_SPIRV,
+        .stage                = SDL_GPU_SHADERSTAGE_FRAGMENT,
         .num_samplers         = data.num_samplers,
         .num_storage_textures = data.num_readonly_storage_textures + data.num_readwrite_storage_textures,
         .num_storage_buffers  = data.num_readonly_storage_buffers + data.num_readwrite_storage_buffers,
@@ -277,7 +312,7 @@ GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std
 }
 
 bool GPUComputePipelineEx::RebuildPipeline() {
-    std::vector<u32> code = CompileShader(m_path, m_defines);
+    std::vector<u32> code = CompileShader(m_path, EShLangCompute, m_defines);
     if (code.empty()) {
         std::cerr << "Failed to compile compute shader: " << m_path << std::endl;
         return false;

@@ -54,8 +54,8 @@ int main() {
         {}
     );
 
-    GPUShader vs = CreateGPUShader(device.get(), "shaders/fullscreen.vert");
-    GPUShader fs = CreateGPUShader(device.get(), "shaders/fullscreen.frag");
+    GPUShader vs = CreateGPUShaderVertex(device.get(), "shaders/fullscreen.glsl");
+    GPUShader fs = CreateGPUShaderFragment(device.get(), "shaders/fullscreen.glsl");
 
     std::array color_targets = {
         SDL_GPUColorTargetDescription{

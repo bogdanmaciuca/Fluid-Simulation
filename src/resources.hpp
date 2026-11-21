@@ -55,18 +55,26 @@ struct ReflectionData {
 
 using ShaderDefineVector = std::vector<std::pair<std::string, std::string>>;
 
-std::vector<u32> CompileShader(const std::string& path, const ShaderDefineVector& defines = {});
+std::vector<u32> CompileShader(const std::string& path, EShLanguage stage, const ShaderDefineVector& defines);
 ReflectionData ReflectShader(std::span<u32> spirv_code);
 
 // Create* functions for the basic resources we wrapped
 Window CreateWindow(const std::string& title, int w, int h);
+
 GPUDevice CreateGPUDevice();
+
 GPUBuffer CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info);
+
 GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info);
 GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path, ShaderDefineVector defines = {});
+
 GPUGraphicsPipeline CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info);
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info);
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path);
+
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info, const ShaderDefineVector& defines = {});
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines = {});
+GPUShader CreateGPUShaderVertex(SDL_GPUDevice* device, const std::string& path);
+GPUShader CreateGPUShaderFragment(SDL_GPUDevice* device, const std::string& path);
+
 GPUTexture CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
 GPUSampler CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info);
 
@@ -104,6 +112,7 @@ private:
     u32 m_thread_count_z = 1;
 };
 
+// TODO
 class GPUGraphicsPipelineEx {
 public:
     GPUGraphicsPipelineEx() = default;
@@ -111,7 +120,6 @@ public:
 
     void ReloadIfModified();
     void DispatchAsPass() const;
-
 private:
     bool RebuildPipeline();
 
@@ -120,8 +128,7 @@ private:
     GPUGraphicsPipeline m_pipeline;
     std::filesystem::file_time_type m_last_write_time;
 
-    std::vector<SDL_GPUStorageTextureReadWriteBinding> m_texture_bindings;
-    std::vector<SDL_GPUStorageBufferReadWriteBinding> m_buffer_bindings;
+    // Bindings?
 };
 
 // ImGui helper. Must be defined only once and passed by reference if needed.
