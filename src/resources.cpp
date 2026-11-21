@@ -121,16 +121,16 @@ GPUDevice CreateGPUDevice() {
     return GPUDevice(device);
 }
 
-GPUBuffer CreateGPUBuffer(const GPUDevice& device, const SDL_GPUBufferCreateInfo& create_info) {
-    auto buffer = SDL_CreateGPUBuffer(device.get(), &create_info);
+GPUBuffer CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info) {
+    auto buffer = SDL_CreateGPUBuffer(device, &create_info);
     assert(buffer != nullptr);
-    return GPUBuffer(buffer, ResourceDeleter{ device.get() });
+    return GPUBuffer(buffer, ResourceDeleter{ device });
 }
 
-GPUComputePipeline CreateGPUComputePipeline(const GPUDevice& device, const SDL_GPUComputePipelineCreateInfo& create_info) {
-    auto pipeline = SDL_CreateGPUComputePipeline(device.get(), &create_info);
+GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info) {
+    auto pipeline = SDL_CreateGPUComputePipeline(device, &create_info);
     assert(pipeline != nullptr);
-    return GPUComputePipeline(pipeline, ResourceDeleter{ device.get() });
+    return GPUComputePipeline(pipeline, ResourceDeleter{ device });
 }
 
 namespace {
@@ -154,26 +154,26 @@ namespace {
     }
 }
 
-GPUComputePipeline CreateGPUComputePipeline(const GPUDevice& device, const std::string& path) {
+GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path) {
     std::vector<u32> code = CompileShader(path);
     assert(!code.empty());
     ReflectionData data = ReflectShader(code);
     return CreateGPUComputePipeline(device, MakeComputePipelineCreateInfo(code, data));
 }
 
-GPUGraphicsPipeline CreateGPUGraphicsPipeline(const GPUDevice& device, const SDL_GPUGraphicsPipelineCreateInfo& create_info) {
-    auto pipeline = SDL_CreateGPUGraphicsPipeline(device.get(), &create_info);
+GPUGraphicsPipeline CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info) {
+    auto pipeline = SDL_CreateGPUGraphicsPipeline(device, &create_info);
     assert(pipeline != nullptr);
-    return GPUGraphicsPipeline(pipeline, ResourceDeleter{ device.get() });
+    return GPUGraphicsPipeline(pipeline, ResourceDeleter{ device });
 }
 
-GPUShader CreateGPUShader(const GPUDevice& device, const SDL_GPUShaderCreateInfo& create_info) {
-    auto shader = SDL_CreateGPUShader(device.get(), &create_info);
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info) {
+    auto shader = SDL_CreateGPUShader(device, &create_info);
     assert(shader != nullptr);
-    return GPUShader(shader, ResourceDeleter{ device.get() });
+    return GPUShader(shader, ResourceDeleter{ device });
 }
 
-GPUShader CreateGPUShader(const GPUDevice& device, const std::string& path) {
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path) {
     const auto stage_from_path = [](const std::string& path) {
         if (path.ends_with(".vert")) return SDL_GPU_SHADERSTAGE_VERTEX;
         if (path.ends_with(".frag")) return SDL_GPU_SHADERSTAGE_FRAGMENT;
@@ -199,20 +199,20 @@ GPUShader CreateGPUShader(const GPUDevice& device, const std::string& path) {
     return CreateGPUShader(device, create_info);
 }
 
-GPUTexture CreateGPUTexture(const GPUDevice& device, const SDL_GPUTextureCreateInfo& create_info) {
-    auto texture = SDL_CreateGPUTexture(device.get(), &create_info);
+GPUTexture CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info) {
+    auto texture = SDL_CreateGPUTexture(device, &create_info);
     assert(texture != nullptr);
-    return GPUTexture(texture, ResourceDeleter{ device.get() });
+    return GPUTexture(texture, ResourceDeleter{ device });
 }
 
-GPUSampler CreateGPUSampler(const GPUDevice& device, const SDL_GPUSamplerCreateInfo& create_info) {
-    auto sampler = SDL_CreateGPUSampler(device.get(), &create_info);
+GPUSampler CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info) {
+    auto sampler = SDL_CreateGPUSampler(device, &create_info);
     assert(sampler != nullptr);
-    return GPUSampler(sampler, ResourceDeleter{ device.get() });
+    return GPUSampler(sampler, ResourceDeleter{ device });
 }
 
-GPUComputePipelineEx::GPUComputePipelineEx(const GPUDevice& device, const std::string& path)
-    : m_device(device.get())
+GPUComputePipelineEx::GPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path)
+    : m_device(device)
     , m_path(path)
     , m_last_write_time(std::filesystem::last_write_time(path)) {
     RebuildPipeline();
@@ -275,3 +275,8 @@ void GPUComputePipelineEx::DispatchAsPass(
 
     SDL_EndGPUComputePass(compute_pass);
 }
+
+GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path) {
+    return GPUComputePipelineEx(device, path);
+}
+

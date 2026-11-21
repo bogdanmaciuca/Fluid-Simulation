@@ -3,7 +3,7 @@
 constexpr float FIXED_TIMESTEP = 0.01666f; // 60Hz
 
 using UpdateFunc = std::function<void(float dt)>;
-using RenderFunc = std::function<void(SDL_GPUCommandBuffer*, SDL_GPUTexture*, u32, u32)>;
+using RenderFunc = std::function<void()>;
 using OnEventFunc = std::function<bool(const SDL_Event& event)>;
 
 struct MainLoopCallbacks {

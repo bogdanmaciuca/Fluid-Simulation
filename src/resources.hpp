@@ -56,18 +56,19 @@ ReflectionData ReflectShader(std::span<u32> spirv_code);
 
 Window CreateWindow(const std::string& title, int w, int h);
 GPUDevice CreateGPUDevice();
-GPUBuffer CreateGPUBuffer(const GPUDevice& device, const SDL_GPUBufferCreateInfo& create_info);
-GPUComputePipeline CreateGPUComputePipeline(const GPUDevice& device, const SDL_GPUComputePipelineCreateInfo& create_info);
-GPUComputePipeline CreateGPUComputePipeline(const GPUDevice& device, const std::string& path);
-GPUGraphicsPipeline CreateGPUGraphicsPipeline(const GPUDevice& device, const SDL_GPUGraphicsPipelineCreateInfo& create_info);
-GPUShader CreateGPUShader(const GPUDevice& device, const SDL_GPUShaderCreateInfo& create_info);
-GPUShader CreateGPUShader(const GPUDevice& device, const std::string& path);
-GPUTexture CreateGPUTexture(const GPUDevice& device, const SDL_GPUTextureCreateInfo& create_info);
-GPUSampler CreateGPUSampler(const GPUDevice& device, const SDL_GPUSamplerCreateInfo& create_info);
+GPUBuffer CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info);
+GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info);
+GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path);
+GPUGraphicsPipeline CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info);
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info);
+GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path);
+GPUTexture CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
+GPUSampler CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info);
 
 class GPUComputePipelineEx {
 public:
-    GPUComputePipelineEx(const GPUDevice& device, const std::string& path);
+    GPUComputePipelineEx() = default;
+    GPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path);
 
     void ReloadIfModified();
     void SetBindings(
@@ -90,4 +91,6 @@ private:
     u32 m_thread_count_y = 1;
     u32 m_thread_count_z = 1;
 };
+
+GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path);
 
