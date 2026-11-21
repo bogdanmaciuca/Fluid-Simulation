@@ -2,7 +2,7 @@
 
 #include "util.hpp"
 
-std::vector<u32> CompileShader(const std::string& path) {
+std::vector<u32> CompileShader(const std::string& path, const ShaderDefineVector& defines) {
     // Initialize glslang on first call of CompileShader()
     static auto do_once = std::invoke([]() {
         bool success = glslang::InitializeProcess();
@@ -27,6 +27,16 @@ std::vector<u32> CompileShader(const std::string& path) {
     shader.setEnvInput(glslang::EShSourceGlsl, stage, glslang::EShClientVulkan, 450);
     shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
     shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
+
+    std::string preamble;
+    for (const auto& [name, value] : defines) {
+        preamble += "#define " + name;
+        if (!value.empty()) {
+            preamble += " " + value;
+        }
+        preamble += "\n";
+    }
+    shader.setPreamble(preamble.c_str());
 
     EShMessages messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules);
     if (!shader.parse(GetDefaultResources(), 450, false, messages)) {
@@ -154,8 +164,8 @@ namespace {
     }
 }
 
-GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path) {
-    std::vector<u32> code = CompileShader(path);
+GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines) {
+    std::vector<u32> code = CompileShader(path, defines);
     assert(!code.empty());
     ReflectionData data = ReflectShader(code);
     return CreateGPUComputePipeline(device, MakeComputePipelineCreateInfo(code, data));
@@ -211,15 +221,63 @@ GPUSampler CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInf
     return GPUSampler(sampler, ResourceDeleter{ device });
 }
 
-GPUComputePipelineEx::GPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path)
-    : m_device(device)
-    , m_path(path)
-    , m_last_write_time(std::filesystem::last_write_time(path)) {
+GPUComputePipelineEx::GPUComputePipelineEx(
+    SDL_GPUDevice* device,
+    const std::string& path,
+    const ShaderDefineVector& defines
+) :
+    m_device(device),
+    m_path(path),
+    m_last_write_time(std::filesystem::last_write_time(path)),
+    m_defines(defines)
+{
     RebuildPipeline();
 }
 
+void GPUComputePipelineEx::ReloadIfModified() {
+    auto current = std::filesystem::last_write_time(m_path);
+    if (current == m_last_write_time) {
+        return;
+    }
+
+    if (RebuildPipeline()) {
+        m_last_write_time = current;
+    }
+}
+
+void GPUComputePipelineEx::SetBindings(
+    std::span<const SDL_GPUStorageTextureReadWriteBinding> textures,
+    std::span<const SDL_GPUStorageBufferReadWriteBinding> buffers) {
+    m_texture_bindings.assign(textures.begin(), textures.end());
+    m_buffer_bindings.assign(buffers.begin(), buffers.end());
+}
+
+void GPUComputePipelineEx::SetDefines(ShaderDefineVector defines) {
+    m_defines = defines;
+}
+
+void GPUComputePipelineEx::DispatchAsPass(
+    SDL_GPUCommandBuffer* command_buffer, u32 work_x, u32 work_y, u32 work_z) const {
+    SDL_GPUComputePass* compute_pass = SDL_BeginGPUComputePass(
+        command_buffer,
+        m_texture_bindings.data(), static_cast<Uint32>(m_texture_bindings.size()),
+        m_buffer_bindings.data(), static_cast<Uint32>(m_buffer_bindings.size()));
+    SDL_BindGPUComputePipeline(compute_pass, m_pipeline.get());
+
+    u32 groupcount_x = (work_x + m_thread_count_x - 1) / m_thread_count_x;
+    u32 groupcount_y = (work_y + m_thread_count_y - 1) / m_thread_count_y;
+    u32 groupcount_z = (work_z + m_thread_count_z - 1) / m_thread_count_z;
+    SDL_DispatchGPUCompute(compute_pass, groupcount_x, groupcount_y, groupcount_z);
+
+    SDL_EndGPUComputePass(compute_pass);
+}
+
+GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path) {
+    return GPUComputePipelineEx(device, path);
+}
+
 bool GPUComputePipelineEx::RebuildPipeline() {
-    std::vector<u32> code = CompileShader(m_path);
+    std::vector<u32> code = CompileShader(m_path, m_defines);
     if (code.empty()) {
         std::cerr << "Failed to compile compute shader: " << m_path << std::endl;
         return false;
@@ -242,7 +300,40 @@ bool GPUComputePipelineEx::RebuildPipeline() {
     return true;
 }
 
-void GPUComputePipelineEx::ReloadIfModified() {
+GPUGraphicsPipelineEx::GPUGraphicsPipelineEx(SDL_GPUDevice* device, const std::string& path)
+    : m_device(device)
+    , m_path(path)
+    , m_last_write_time(std::filesystem::last_write_time(path)) {
+    RebuildPipeline();
+}
+
+bool GPUGraphicsPipelineEx::RebuildPipeline() {
+    assert(false && "TODO");
+    //
+    // std::vector<u32> code = CompileShader(m_path);
+    // if (code.empty()) {
+    //     std::cerr << "Failed to compile compute shader: " << m_path << std::endl;
+    //     return false;
+    // }
+    //
+    // ReflectionData data = ReflectShader(code);
+    //
+    // SDL_GPUGraphicsPipelineCreateInfo create_info = MakeComputePipelineCreateInfo(code, data);
+    // SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(m_device, &create_info);
+    // if (pipeline == nullptr) {
+    //     std::cerr << "Failed to create compute pipeline from shader: " << m_path << std::endl;
+    //     return false;
+    // }
+    //
+    // m_thread_count_x = data.threadcount_x;
+    // m_thread_count_y = data.threadcount_y;
+    // m_thread_count_z = data.threadcount_z;
+    //
+    // m_pipeline = GPUGraphicsPipeline(pipeline, ResourceDeleter{ m_device });
+    // return true;
+}
+
+void GPUGraphicsPipelineEx::ReloadIfModified() {
     auto current = std::filesystem::last_write_time(m_path);
     if (current == m_last_write_time) {
         return;
@@ -253,31 +344,8 @@ void GPUComputePipelineEx::ReloadIfModified() {
     }
 }
 
-void GPUComputePipelineEx::SetBindings(
-    std::span<const SDL_GPUStorageTextureReadWriteBinding> textures,
-    std::span<const SDL_GPUStorageBufferReadWriteBinding> buffers) {
-    m_texture_bindings.assign(textures.begin(), textures.end());
-    m_buffer_bindings.assign(buffers.begin(), buffers.end());
-}
-
-void GPUComputePipelineEx::DispatchAsPass(
-    SDL_GPUCommandBuffer* command_buffer, u32 work_x, u32 work_y, u32 work_z) const {
-    SDL_GPUComputePass* compute_pass = SDL_BeginGPUComputePass(
-        command_buffer,
-        m_texture_bindings.data(), static_cast<Uint32>(m_texture_bindings.size()),
-        m_buffer_bindings.data(), static_cast<Uint32>(m_buffer_bindings.size()));
-    SDL_BindGPUComputePipeline(compute_pass, m_pipeline.get());
-
-    u32 groupcount_x = (work_x + m_thread_count_x - 1) / m_thread_count_x;
-    u32 groupcount_y = (work_y + m_thread_count_y - 1) / m_thread_count_y;
-    u32 groupcount_z = (work_z + m_thread_count_z - 1) / m_thread_count_z;
-    SDL_DispatchGPUCompute(compute_pass, groupcount_x, groupcount_y, groupcount_z);
-
-    SDL_EndGPUComputePass(compute_pass);
-}
-
-GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path) {
-    return GPUComputePipelineEx(device, path);
+GPUGraphicsPipelineEx CreateGPUGraphicsPipelineEx(SDL_GPUDevice* device, const std::string& path) {
+    return GPUGraphicsPipelineEx(device, path);
 }
 
 ImGuiHelper::ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window) :

@@ -30,6 +30,7 @@ struct ResourceDeleter {
     }
 };
 
+// Basic resources; thin SDL_* wrappers
 using Window              = std::unique_ptr<SDL_Window, ResourceDeleter>;
 using GPUDevice           = std::unique_ptr<SDL_GPUDevice, ResourceDeleter>;
 using GPUBuffer           = std::unique_ptr<SDL_GPUBuffer, ResourceDeleter>;
@@ -39,6 +40,7 @@ using GPUShader           = std::unique_ptr<SDL_GPUShader, ResourceDeleter>;
 using GPUTexture          = std::unique_ptr<SDL_GPUTexture, ResourceDeleter>;
 using GPUSampler          = std::unique_ptr<SDL_GPUSampler, ResourceDeleter>;
 
+// Shader utilities; mainly used internally
 struct ReflectionData {
     u32 num_samplers;
     u32 num_readonly_storage_textures;
@@ -51,31 +53,39 @@ struct ReflectionData {
     u32 threadcount_z;
 };
 
-std::vector<u32> CompileShader(const std::string& path);
+using ShaderDefineVector = std::vector<std::pair<std::string, std::string>>;
+
+std::vector<u32> CompileShader(const std::string& path, const ShaderDefineVector& defines = {});
 ReflectionData ReflectShader(std::span<u32> spirv_code);
 
+// Create* functions for the basic resources we wrapped
 Window CreateWindow(const std::string& title, int w, int h);
 GPUDevice CreateGPUDevice();
 GPUBuffer CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info);
 GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info);
-GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path);
+GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path, ShaderDefineVector defines = {});
 GPUGraphicsPipeline CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info);
 GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info);
 GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path);
 GPUTexture CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
 GPUSampler CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info);
 
+// Extented resources; these encapsulate a basic resource + some metadata and functionality
 class GPUComputePipelineEx {
 public:
     GPUComputePipelineEx() = default;
-    GPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path);
+    GPUComputePipelineEx(
+        SDL_GPUDevice* device,
+        const std::string& path,
+        const ShaderDefineVector& defines = {}
+    );
 
     void ReloadIfModified();
     void SetBindings(
         std::span<const SDL_GPUStorageTextureReadWriteBinding> textures,
         std::span<const SDL_GPUStorageBufferReadWriteBinding> buffers);
+    void SetDefines(ShaderDefineVector defines);
     void DispatchAsPass(SDL_GPUCommandBuffer* command_buffer, u32 work_x, u32 work_y, u32 work_z) const;
-
 private:
     bool RebuildPipeline();
 
@@ -87,13 +97,35 @@ private:
     std::vector<SDL_GPUStorageTextureReadWriteBinding> m_texture_bindings;
     std::vector<SDL_GPUStorageBufferReadWriteBinding> m_buffer_bindings;
 
+    ShaderDefineVector m_defines;
+
     u32 m_thread_count_x = 1;
     u32 m_thread_count_y = 1;
     u32 m_thread_count_z = 1;
 };
 
-GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path);
+class GPUGraphicsPipelineEx {
+public:
+    GPUGraphicsPipelineEx() = default;
+    GPUGraphicsPipelineEx(SDL_GPUDevice* device, const std::string& path);
 
+    void ReloadIfModified();
+    void DispatchAsPass() const;
+
+private:
+    bool RebuildPipeline();
+
+    SDL_GPUDevice* m_device;
+    std::string m_path;
+    GPUGraphicsPipeline m_pipeline;
+    std::filesystem::file_time_type m_last_write_time;
+
+    std::vector<SDL_GPUStorageTextureReadWriteBinding> m_texture_bindings;
+    std::vector<SDL_GPUStorageBufferReadWriteBinding> m_buffer_bindings;
+};
+
+// ImGui helper. Must be defined only once and passed by reference if needed.
+// Eliminates some boilerplate
 struct ImGuiHelper {
     ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window);
     ~ImGuiHelper();

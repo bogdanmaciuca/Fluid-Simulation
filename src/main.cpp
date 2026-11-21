@@ -37,7 +37,11 @@ int main() {
         .max_lod          = 0.0f,
     });
 
-    GPUComputePipelineEx compute(device.get(), "shaders/compute.comp");
+    GPUComputePipelineEx compute(
+        device.get(),
+        "shaders/compute.comp",
+        {{"VALUE", "1.0"}}
+    );
     compute.SetBindings(
         std::array{
             SDL_GPUStorageTextureReadWriteBinding{

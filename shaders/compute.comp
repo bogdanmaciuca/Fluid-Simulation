@@ -9,5 +9,5 @@ void main() {
     ivec2 size = imageSize(imgOutput);
     vec2 uv = vec2(c) / vec2(size);
 
-    imageStore(imgOutput, c, vec4(uv, 1.0, 1.0));
+    imageStore(imgOutput, c, vec4(uv, VALUE, 1.0));
 }

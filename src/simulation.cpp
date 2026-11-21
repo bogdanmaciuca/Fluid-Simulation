@@ -20,6 +20,6 @@ Simulation::Simulation(SDL_GPUDevice* device) :
         SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
     m_ssbo = CreateGPUBuffer(m_device, { .usage = usage, .size = SSBO_SIZE });
 
-    m_sort_pipeline = CreateGPUComputePipelineEx(device, SORT_PATH);
+    m_sort_pipeline = GPUComputePipelineEx(device, SORT_PATH);
 }
 
