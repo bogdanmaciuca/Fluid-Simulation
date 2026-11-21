@@ -13,6 +13,8 @@ int main() {
     GPUDevice device = CreateGPUDevice();
     SDL_ClaimWindowForGPUDevice(device.get(), window.get());
 
+    ImGuiHelper imgui(device.get(), window.get());
+
     GPUTexture texture = CreateGPUTexture(device.get(), {
         .type                 = SDL_GPU_TEXTURETYPE_2D,
         .format               = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
@@ -116,23 +118,18 @@ int main() {
                 SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
 
                 SDL_EndGPURenderPass(render_pass);
+
+                imgui.NewFrame();
+                ImGui::Begin("Hello byatch");
+                ImGui::End();
+                imgui.EndFrame();
+
+                imgui.DispatchRenderPass(command_buffer, swapchain_texture);
             }
 
             SDL_SubmitGPUCommandBuffer(command_buffer);
         }
     });
-
-    bool running = true;
-    while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT) {
-                running = false;
-            }
-        }
-
-
-    }
 
     SDL_ReleaseWindowFromGPUDevice(device.get(), window.get());
 

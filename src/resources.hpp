@@ -94,3 +94,18 @@ private:
 
 GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path);
 
+struct ImGuiHelper {
+    ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window);
+    ~ImGuiHelper();
+    ImGuiHelper(const ImGuiHelper&) = delete;
+    ImGuiHelper& operator=(const ImGuiHelper&) = delete;
+    ImGuiHelper(ImGuiHelper&&) = delete;
+    ImGuiHelper& operator=(ImGuiHelper&&) = delete;
+
+    void NewFrame();
+    void EndFrame();
+    void DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_GPUTexture* texture);
+private:
+    SDL_GPUDevice* m_device;
+};
+

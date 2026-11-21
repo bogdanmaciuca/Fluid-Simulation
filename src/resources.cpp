@@ -280,3 +280,49 @@ GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std
     return GPUComputePipelineEx(device, path);
 }
 
+ImGuiHelper::ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window) :
+    m_device(device)
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui_ImplSDL3_InitForSDLGPU(window);
+    ImGui_ImplSDLGPU3_InitInfo init_info = {
+        .Device = device,
+        .ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(device, window)
+    };
+    ImGui_ImplSDLGPU3_Init(&init_info);
+
+}
+
+ImGuiHelper::~ImGuiHelper() {
+    SDL_WaitForGPUIdle(m_device);
+    ImGui_ImplSDL3_Shutdown();
+    ImGui_ImplSDLGPU3_Shutdown();
+    ImGui::DestroyContext();
+}
+
+void ImGuiHelper::NewFrame() {
+    ImGui_ImplSDLGPU3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+}
+
+void ImGuiHelper::EndFrame() {
+    ImGui::Render();
+}
+
+void ImGuiHelper::DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_GPUTexture* texture) {
+    ImGui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), command_buffer);
+
+    SDL_GPUColorTargetInfo color_target = {
+        .texture     = texture,
+        .load_op     = SDL_GPU_LOADOP_LOAD,
+        .store_op    = SDL_GPU_STOREOP_STORE,
+    };
+
+    SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(
+        command_buffer, &color_target, 1, nullptr);
+    ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), command_buffer, render_pass);
+    SDL_EndGPURenderPass(render_pass);
+}
+
