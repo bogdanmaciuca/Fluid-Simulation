@@ -1,17 +1,34 @@
 #include "resources.hpp"
 
+#include <algorithm>
+
 #include "util.hpp"
 
-std::vector<u32> CompileShader(const std::string& path, EShLanguage stage, const ShaderDefineVector& defines) {
-    // Initialize glslang on first call of CompileShader()
-    static auto do_once = std::invoke([]() {
-        bool success = glslang::InitializeProcess();
-        assert(success);
-        return 0;
-    });
+namespace {
+    u32 VertexElementFormatSize(SDL_GPUVertexElementFormat format) {
+        switch (format) {
+            case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2: return 8;
+            case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3: return 12;
+            case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4: return 16;
+            default: return 0;
+        }
+    }
+}
 
-    std::string source = ReadFile(path);
-    const char* c_source = source.c_str();
+std::optional<std::vector<u32>> CompileShader(const std::string& path, EShLanguage stage, const ShaderDefineVector& defines) {
+    // Initialize glslang on first call of CompileShader()
+    static const bool glslang_initialized = glslang::InitializeProcess();
+    if (!glslang_initialized) {
+        std::cerr << "Failed to initialize glslang" << std::endl;
+        return std::nullopt;
+    }
+
+    std::optional<std::string> source = ReadFile(path);
+    if (!source) {
+        std::cerr << "Failed to read shader file: " << path << std::endl;
+        return std::nullopt;
+    }
+    const char* c_source = source->c_str();
 
     glslang::TShader shader(stage);
     shader.setStrings(&c_source, 1);
@@ -36,12 +53,12 @@ std::vector<u32> CompileShader(const std::string& path, EShLanguage stage, const
             case EShLangVertex: stage_str = "Vertex"; break;
             case EShLangFragment: stage_str = "Fragment"; break;
             case EShLangCompute: stage_str = "Compute"; break;
-            default: assert(false);
+            default: stage_str = "Unknown"; break;
         }
         std::cerr << "GLSL Compilation Failed (" << stage_str << "):\n"
             << shader.getInfoLog() << "\n"
             << shader.getInfoDebugLog() << std::endl;
-        return {};
+        return std::nullopt;
     }
 
     glslang::TProgram program;
@@ -51,7 +68,7 @@ std::vector<u32> CompileShader(const std::string& path, EShLanguage stage, const
         std::cerr << "GLSL Linking Failed:\n"
             << program.getInfoLog() << "\n"
             << program.getInfoDebugLog() << std::endl;
-        return {};
+        return std::nullopt;
     }
 
     std::vector<u32> result;
@@ -60,13 +77,19 @@ std::vector<u32> CompileShader(const std::string& path, EShLanguage stage, const
     return result;
 }
 
-ReflectionData ReflectShader(std::span<u32> spirv_code) {
-    assert(!spirv_code.empty());
+std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code) {
+    if (spirv_code.empty()) {
+        std::cerr << "Cannot reflect! Empty SPIRV code vector\n";
+        return std::nullopt;
+    }
 
     SpvReflectShaderModule module = {};
     SpvReflectResult result = spvReflectCreateShaderModule(
         spirv_code.size_bytes(), spirv_code.data(), &module);
-    assert(result == SPV_REFLECT_RESULT_SUCCESS);
+    if (result != SPV_REFLECT_RESULT_SUCCESS) {
+        std::cerr << "Reflection failed! SpvReflect error " << result << "\n";
+        return std::nullopt;
+    }
 
     ReflectionData data = {};
     for (u32 i = 0; i < module.descriptor_binding_count; ++i) {
@@ -106,153 +129,302 @@ ReflectionData ReflectShader(std::span<u32> spirv_code) {
         data.threadcount_z = module.entry_points[0].local_size.z;
     }
 
+    const auto ToVertexElementFormat = [](SpvReflectFormat format) {
+        switch (format) {
+            case SPV_REFLECT_FORMAT_R32G32_SFLOAT:       return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+            case SPV_REFLECT_FORMAT_R32G32B32_SFLOAT:    return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+            case SPV_REFLECT_FORMAT_R32G32B32A32_SFLOAT: return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+            default:                                     return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
+        }
+    };
+
+    struct ReflectedAttribute {
+        u32 location;
+        SDL_GPUVertexElementFormat format;
+    };
+    std::vector<ReflectedAttribute> attributes;
+    bool unsupported_format = false;
+    if (module.shader_stage == SPV_REFLECT_SHADER_STAGE_VERTEX_BIT) {
+        for (u32 i = 0; i < module.input_variable_count; ++i) {
+            const SpvReflectInterfaceVariable& variable = *module.input_variables[i];
+            if (variable.built_in >= 0) {
+                continue;
+            }
+            if (variable.location == 0xFFFFFFFF) {
+                continue;
+            }
+
+            SDL_GPUVertexElementFormat format = ToVertexElementFormat(variable.format);
+            if (format == SDL_GPU_VERTEXELEMENTFORMAT_INVALID) {
+                std::cerr << "Unsupported vertex input format at location "
+                    << variable.location << "\n";
+                unsupported_format = true;
+                break;
+            }
+
+            attributes.push_back({ variable.location, format });
+        }
+    }
+
+    if (unsupported_format) {
+        spvReflectDestroyShaderModule(&module);
+        return std::nullopt;
+    }
+
+    std::sort(attributes.begin(), attributes.end(), [](const ReflectedAttribute& a, const ReflectedAttribute& b) {
+        return a.location < b.location;
+    });
+
+    u32 offset = 0;
+    for (const ReflectedAttribute& attribute : attributes) {
+        data.vertex_attributes.push_back({
+            .location    = attribute.location,
+            .buffer_slot = 0,
+            .format      = attribute.format,
+            .offset      = offset,
+        });
+        offset += VertexElementFormatSize(attribute.format);
+    }
+
     spvReflectDestroyShaderModule(&module);
     return data;
 }
 
-Window CreateWindow(const std::string& title, int w, int h) {
+std::optional<Window> CreateWindow(const std::string& title, int w, int h) {
     auto window = SDL_CreateWindow(title.c_str(), w, h, SDL_WINDOW_RESIZABLE);
-    assert(window != nullptr);
+    if (window == nullptr) {
+        std::cerr << "Failed to create window: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return Window(window);
 }
 
-GPUDevice CreateGPUDevice() {
+std::optional<GPUDevice> CreateGPUDevice() {
     auto device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, FL_DEBUG, nullptr);
-    assert(device != nullptr);
+    if (device == nullptr) {
+        std::cerr << "Failed to create GPU device: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return GPUDevice(device);
 }
 
-GPUBuffer CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info) {
+std::optional<GPUBuffer> CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info) {
     auto buffer = SDL_CreateGPUBuffer(device, &create_info);
-    assert(buffer != nullptr);
+    if (buffer == nullptr) {
+        std::cerr << "Failed to create GPU buffer: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return GPUBuffer(buffer, ResourceDeleter{ device });
 }
 
-GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info) {
+std::optional<GPUComputePipeline> CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info) {
     auto pipeline = SDL_CreateGPUComputePipeline(device, &create_info);
-    assert(pipeline != nullptr);
+    if (pipeline == nullptr) {
+        std::cerr << "Failed to create GPU compute pipeline: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return GPUComputePipeline(pipeline, ResourceDeleter{ device });
 }
 
-namespace {
-    SDL_GPUComputePipelineCreateInfo MakeComputePipelineCreateInfo(
-        const std::vector<u32>& code, const ReflectionData& data) {
-        return SDL_GPUComputePipelineCreateInfo{
-            .code_size                      = code.size() * sizeof(u32),
-            .code                           = reinterpret_cast<const Uint8*>(code.data()),
-            .entrypoint                     = "main",
-            .format                         = SDL_GPU_SHADERFORMAT_SPIRV,
-            .num_samplers                   = data.num_samplers,
-            .num_readonly_storage_textures  = data.num_readonly_storage_textures,
-            .num_readonly_storage_buffers   = data.num_readonly_storage_buffers,
-            .num_readwrite_storage_textures = data.num_readwrite_storage_textures,
-            .num_readwrite_storage_buffers  = data.num_readwrite_storage_buffers,
-            .num_uniform_buffers            = data.num_uniform_buffers,
-            .threadcount_x                  = data.threadcount_x,
-            .threadcount_y                  = data.threadcount_y,
-            .threadcount_z                  = data.threadcount_z,
-        };
+std::optional<GPUComputePipeline> CreateGPUComputePipeline(
+    SDL_GPUDevice* device,
+    const std::string& path,
+    ShaderDefineVector defines,
+    ReflectionData* reflection
+) {
+    std::optional<std::vector<u32>> code = CompileShader(path, EShLangCompute, defines);
+    if (!code) {
+        return std::nullopt;
     }
+
+    std::optional<ReflectionData> data = ReflectShader(*code);
+    if (!data) {
+        return std::nullopt;
+    }
+
+    std::optional<GPUComputePipeline> pipeline = CreateGPUComputePipeline(device, {
+        .code_size                      = code->size() * sizeof(u32),
+        .code                           = reinterpret_cast<const Uint8*>(code->data()),
+        .entrypoint                     = "main",
+        .format                         = SDL_GPU_SHADERFORMAT_SPIRV,
+        .num_samplers                   = data->num_samplers,
+        .num_readonly_storage_textures  = data->num_readonly_storage_textures,
+        .num_readonly_storage_buffers   = data->num_readonly_storage_buffers,
+        .num_readwrite_storage_textures = data->num_readwrite_storage_textures,
+        .num_readwrite_storage_buffers  = data->num_readwrite_storage_buffers,
+        .num_uniform_buffers            = data->num_uniform_buffers,
+        .threadcount_x                  = data->threadcount_x,
+        .threadcount_y                  = data->threadcount_y,
+        .threadcount_z                  = data->threadcount_z,
+    });
+    if (!pipeline) {
+        return std::nullopt;
+    }
+
+    if (reflection) {
+        *reflection = *data;
+    }
+
+    return pipeline;
 }
 
-GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines) {
-    std::vector<u32> code = CompileShader(path, EShLangCompute, defines);
-    assert(!code.empty());
-    ReflectionData data = ReflectShader(code);
-    return CreateGPUComputePipeline(device, MakeComputePipelineCreateInfo(code, data));
-}
-
-GPUGraphicsPipeline CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info) {
+std::optional<GPUGraphicsPipeline> CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info) {
     auto pipeline = SDL_CreateGPUGraphicsPipeline(device, &create_info);
-    assert(pipeline != nullptr);
+    if (pipeline == nullptr) {
+        std::cerr << "Failed to create GPU graphics pipeline: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return GPUGraphicsPipeline(pipeline, ResourceDeleter{ device });
 }
 
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info, const ShaderDefineVector& defines) {
+std::optional<GPUShader> CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info, const ShaderDefineVector& defines) {
     auto shader = SDL_CreateGPUShader(device, &create_info);
-    assert(shader != nullptr);
+    if (shader == nullptr) {
+        std::cerr << "Failed to create GPU shader: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return GPUShader(shader, ResourceDeleter{ device });
 }
 
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines) {
+std::optional<GPUShader> CreateGPUShader(
+    SDL_GPUDevice* device,
+    const std::string& path,
+    const ShaderDefineVector& defines,
+    ReflectionData* reflection
+) {
     SDL_GPUShaderStage sdl_stage;
     EShLanguage glslang_stage;
 
     if (path.ends_with(".vert")) {
-        return CreateGPUShaderVertex(device, path);
+        return CreateGPUShaderVertex(device, path, reflection);
     }
     else if (path.ends_with(".frag")) {
-        return CreateGPUShaderFragment(device, path);
+        return CreateGPUShaderFragment(device, path, reflection);
     }
     else {
-        assert(false && "Cannot deduce shader type from this extension!");
+        std::cerr << "Cannot deduce shader type from this extension: " << path << std::endl;
+        return std::nullopt;
     }
 
-    std::vector<u32> code = CompileShader(path, glslang_stage, defines);
-    assert(!code.empty());
-    ReflectionData data = ReflectShader(code);
+    std::optional<std::vector<u32>> code = CompileShader(path, glslang_stage, defines);
+    if (!code) {
+        return std::nullopt;
+    }
+
+    std::optional<ReflectionData> data = ReflectShader(*code);
+    if (!data) {
+        return std::nullopt;
+    }
 
     SDL_GPUShaderCreateInfo create_info = {
-        .code_size            = code.size() * sizeof(u32),
-        .code                 = reinterpret_cast<const Uint8*>(code.data()),
+        .code_size            = code->size() * sizeof(u32),
+        .code                 = reinterpret_cast<const Uint8*>(code->data()),
         .entrypoint           = "main",
         .format               = SDL_GPU_SHADERFORMAT_SPIRV,
         .stage                = sdl_stage,
-        .num_samplers         = data.num_samplers,
-        .num_storage_textures = data.num_readonly_storage_textures + data.num_readwrite_storage_textures,
-        .num_storage_buffers  = data.num_readonly_storage_buffers + data.num_readwrite_storage_buffers,
-        .num_uniform_buffers  = data.num_uniform_buffers,
+        .num_samplers         = data->num_samplers,
+        .num_storage_textures = data->num_readonly_storage_textures + data->num_readwrite_storage_textures,
+        .num_storage_buffers  = data->num_readonly_storage_buffers + data->num_readwrite_storage_buffers,
+        .num_uniform_buffers  = data->num_uniform_buffers,
     };
-    return CreateGPUShader(device, create_info);
+
+    std::optional<GPUShader> shader = CreateGPUShader(device, create_info);
+    if (!shader) {
+        return std::nullopt;
+    }
+
+    if (reflection) {
+        *reflection = *data;
+    }
+
+    return shader;
 }
 
-GPUShader CreateGPUShaderVertex(SDL_GPUDevice* device, const std::string& path) {
-    std::vector<u32> code = CompileShader(path, EShLangVertex, {{"VS", ""}});
-    assert(!code.empty());
-    ReflectionData data = ReflectShader(code);
+std::optional<GPUShader> CreateGPUShaderVertex(SDL_GPUDevice* device, const std::string& path, ReflectionData* reflection) {
+    std::optional<std::vector<u32>> code = CompileShader(path, EShLangVertex, {{"VS", ""}});
+    if (!code) {
+        return std::nullopt;
+    }
+
+    std::optional<ReflectionData> data = ReflectShader(*code);
+    if (!data) {
+        return std::nullopt;
+    }
 
     SDL_GPUShaderCreateInfo create_info = {
-        .code_size            = code.size() * sizeof(u32),
-        .code                 = reinterpret_cast<const Uint8*>(code.data()),
+        .code_size            = code->size() * sizeof(u32),
+        .code                 = reinterpret_cast<const Uint8*>(code->data()),
         .entrypoint           = "main",
         .format               = SDL_GPU_SHADERFORMAT_SPIRV,
         .stage                = SDL_GPU_SHADERSTAGE_VERTEX,
-        .num_samplers         = data.num_samplers,
-        .num_storage_textures = data.num_readonly_storage_textures + data.num_readwrite_storage_textures,
-        .num_storage_buffers  = data.num_readonly_storage_buffers + data.num_readwrite_storage_buffers,
-        .num_uniform_buffers  = data.num_uniform_buffers,
+        .num_samplers         = data->num_samplers,
+        .num_storage_textures = data->num_readonly_storage_textures + data->num_readwrite_storage_textures,
+        .num_storage_buffers  = data->num_readonly_storage_buffers + data->num_readwrite_storage_buffers,
+        .num_uniform_buffers  = data->num_uniform_buffers,
     };
-    return CreateGPUShader(device, create_info);
+
+    std::optional<GPUShader> shader = CreateGPUShader(device, create_info);
+    if (!shader) {
+        return std::nullopt;
+    }
+
+    if (reflection) {
+        *reflection = *data;
+    }
+
+    return shader;
 }
 
-GPUShader CreateGPUShaderFragment(SDL_GPUDevice* device, const std::string& path) {
-    std::vector<u32> code = CompileShader(path, EShLangFragment, {{"FS", ""}});
-    assert(!code.empty());
-    ReflectionData data = ReflectShader(code);
+std::optional<GPUShader> CreateGPUShaderFragment(SDL_GPUDevice* device, const std::string& path, ReflectionData* reflection) {
+    std::optional<std::vector<u32>> code = CompileShader(path, EShLangFragment, {{"FS", ""}});
+    if (!code) {
+        return std::nullopt;
+    }
+
+    std::optional<ReflectionData> data = ReflectShader(*code);
+    if (!data) {
+        return std::nullopt;
+    }
 
     SDL_GPUShaderCreateInfo create_info = {
-        .code_size            = code.size() * sizeof(u32),
-        .code                 = reinterpret_cast<const Uint8*>(code.data()),
+        .code_size            = code->size() * sizeof(u32),
+        .code                 = reinterpret_cast<const Uint8*>(code->data()),
         .entrypoint           = "main",
         .format               = SDL_GPU_SHADERFORMAT_SPIRV,
         .stage                = SDL_GPU_SHADERSTAGE_FRAGMENT,
-        .num_samplers         = data.num_samplers,
-        .num_storage_textures = data.num_readonly_storage_textures + data.num_readwrite_storage_textures,
-        .num_storage_buffers  = data.num_readonly_storage_buffers + data.num_readwrite_storage_buffers,
-        .num_uniform_buffers  = data.num_uniform_buffers,
+        .num_samplers         = data->num_samplers,
+        .num_storage_textures = data->num_readonly_storage_textures + data->num_readwrite_storage_textures,
+        .num_storage_buffers  = data->num_readonly_storage_buffers + data->num_readwrite_storage_buffers,
+        .num_uniform_buffers  = data->num_uniform_buffers,
     };
-    return CreateGPUShader(device, create_info);
+
+    std::optional<GPUShader> shader = CreateGPUShader(device, create_info);
+    if (!shader) {
+        return std::nullopt;
+    }
+
+    if (reflection) {
+        *reflection = *data;
+    }
+
+    return shader;
 }
 
-GPUTexture CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info) {
+std::optional<GPUTexture> CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info) {
     auto texture = SDL_CreateGPUTexture(device, &create_info);
-    assert(texture != nullptr);
+    if (texture == nullptr) {
+        std::cerr << "Failed to create GPU texture: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return GPUTexture(texture, ResourceDeleter{ device });
 }
 
-GPUSampler CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info) {
+std::optional<GPUSampler> CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info) {
     auto sampler = SDL_CreateGPUSampler(device, &create_info);
-    assert(sampler != nullptr);
+    if (sampler == nullptr) {
+        std::cerr << "Failed to create GPU sampler: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
     return GPUSampler(sampler, ResourceDeleter{ device });
 }
 
@@ -261,11 +433,11 @@ GPUComputePipelineEx::GPUComputePipelineEx(
     const std::string& path,
     const ShaderDefineVector& defines
 ) :
-    m_device(device),
     m_path(path),
     m_last_write_time(std::filesystem::last_write_time(path)),
     m_defines(defines)
 {
+    m_pipeline.get_deleter().device = device;
     RebuildPipeline();
 }
 
@@ -292,11 +464,19 @@ void GPUComputePipelineEx::SetDefines(ShaderDefineVector defines) {
 }
 
 void GPUComputePipelineEx::DispatchAsPass(
-    SDL_GPUCommandBuffer* command_buffer, u32 work_x, u32 work_y, u32 work_z) const {
+    SDL_GPUCommandBuffer* command_buffer,
+    u32 work_x, u32 work_y, u32 work_z
+) const {
+    if (!m_pipeline) {
+        std::cerr << "Cannot dispatch compute pass: pipeline is null" << std::endl;
+        return;
+    }
+
     SDL_GPUComputePass* compute_pass = SDL_BeginGPUComputePass(
         command_buffer,
         m_texture_bindings.data(), static_cast<Uint32>(m_texture_bindings.size()),
-        m_buffer_bindings.data(), static_cast<Uint32>(m_buffer_bindings.size()));
+        m_buffer_bindings.data(), static_cast<Uint32>(m_buffer_bindings.size())
+    );
     SDL_BindGPUComputePipeline(compute_pass, m_pipeline.get());
 
     u32 groupcount_x = (work_x + m_thread_count_x - 1) / m_thread_count_x;
@@ -312,60 +492,82 @@ GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std
 }
 
 bool GPUComputePipelineEx::RebuildPipeline() {
-    std::vector<u32> code = CompileShader(m_path, EShLangCompute, m_defines);
-    if (code.empty()) {
-        std::cerr << "Failed to compile compute shader: " << m_path << std::endl;
+    ReflectionData reflection;
+    std::optional<GPUComputePipeline> new_pipeline = CreateGPUComputePipeline(
+        m_pipeline.get_deleter().device, m_path, m_defines, &reflection);
+
+    if (!new_pipeline) {
         return false;
     }
 
-    ReflectionData data = ReflectShader(code);
+    m_pipeline = std::move(*new_pipeline);
 
-    SDL_GPUComputePipelineCreateInfo create_info = MakeComputePipelineCreateInfo(code, data);
-    SDL_GPUComputePipeline* pipeline = SDL_CreateGPUComputePipeline(m_device, &create_info);
-    if (pipeline == nullptr) {
-        std::cerr << "Failed to create compute pipeline from shader: " << m_path << std::endl;
-        return false;
-    }
+    m_thread_count_x = reflection.threadcount_x;
+    m_thread_count_y = reflection.threadcount_y;
+    m_thread_count_z = reflection.threadcount_z;
 
-    m_thread_count_x = data.threadcount_x;
-    m_thread_count_y = data.threadcount_y;
-    m_thread_count_z = data.threadcount_z;
-
-    m_pipeline = GPUComputePipeline(pipeline, ResourceDeleter{ m_device });
     return true;
 }
 
-GPUGraphicsPipelineEx::GPUGraphicsPipelineEx(SDL_GPUDevice* device, const std::string& path)
-    : m_device(device)
-    , m_path(path)
-    , m_last_write_time(std::filesystem::last_write_time(path)) {
+GPUGraphicsPipelineEx::GPUGraphicsPipelineEx(
+    SDL_GPUDevice* device,
+    const std::string& path,
+    const SDL_GPUGraphicsPipelineCreateInfo& create_info
+) :
+    m_path(path),
+    m_last_write_time(std::filesystem::last_write_time(path)),
+    m_create_info(create_info)
+{
+    m_pipeline.get_deleter().device = device;
     RebuildPipeline();
 }
 
 bool GPUGraphicsPipelineEx::RebuildPipeline() {
-    assert(false && "TODO");
-    //
-    // std::vector<u32> code = CompileShader(m_path);
-    // if (code.empty()) {
-    //     std::cerr << "Failed to compile compute shader: " << m_path << std::endl;
-    //     return false;
-    // }
-    //
-    // ReflectionData data = ReflectShader(code);
-    //
-    // SDL_GPUGraphicsPipelineCreateInfo create_info = MakeComputePipelineCreateInfo(code, data);
-    // SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(m_device, &create_info);
-    // if (pipeline == nullptr) {
-    //     std::cerr << "Failed to create compute pipeline from shader: " << m_path << std::endl;
-    //     return false;
-    // }
-    //
-    // m_thread_count_x = data.threadcount_x;
-    // m_thread_count_y = data.threadcount_y;
-    // m_thread_count_z = data.threadcount_z;
-    //
-    // m_pipeline = GPUGraphicsPipeline(pipeline, ResourceDeleter{ m_device });
-    // return true;
+    ReflectionData vs_refl;
+    std::optional<GPUShader> vs = CreateGPUShaderVertex(m_pipeline.get_deleter().device, m_path, &vs_refl);
+    if (!vs) {
+        return false;
+    }
+
+    std::optional<GPUShader> fs = CreateGPUShaderFragment(m_pipeline.get_deleter().device, m_path);
+    if (!fs) {
+        return false;
+    }
+
+    u32 pitch = 0;
+    for (const SDL_GPUVertexAttribute& attribute : vs_refl.vertex_attributes) {
+        pitch = std::max(pitch, attribute.offset + VertexElementFormatSize(attribute.format));
+    }
+
+    SDL_GPUVertexBufferDescription vertex_buffer = {
+        .slot               = 0,
+        .pitch              = pitch,
+        .input_rate         = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+        .instance_step_rate = 0,
+    };
+
+    bool has_vertex_attributes = !vs_refl.vertex_attributes.empty();
+
+    SDL_GPUVertexInputState vertex_input_state = {
+        .vertex_buffer_descriptions = has_vertex_attributes ? &vertex_buffer : nullptr,
+        .num_vertex_buffers         = has_vertex_attributes ? 1u : 0u,
+        .vertex_attributes          = has_vertex_attributes ? vs_refl.vertex_attributes.data() : nullptr,
+        .num_vertex_attributes      = has_vertex_attributes ? static_cast<Uint32>(vs_refl.vertex_attributes.size()) : 0u,
+    };
+
+    m_create_info.vertex_shader = vs->get();
+    m_create_info.fragment_shader = fs->get();
+    m_create_info.vertex_input_state = vertex_input_state;
+
+    std::optional<GPUGraphicsPipeline> new_pipeline = CreateGPUGraphicsPipeline(
+        m_pipeline.get_deleter().device, m_create_info);
+    if (!new_pipeline) {
+        return false;
+    }
+
+    m_pipeline = std::move(*new_pipeline);
+
+    return true;
 }
 
 void GPUGraphicsPipelineEx::ReloadIfModified() {
@@ -373,14 +575,30 @@ void GPUGraphicsPipelineEx::ReloadIfModified() {
     if (current == m_last_write_time) {
         return;
     }
+    m_last_write_time = current;
 
-    if (RebuildPipeline()) {
-        m_last_write_time = current;
-    }
+    RebuildPipeline();
 }
 
-GPUGraphicsPipelineEx CreateGPUGraphicsPipelineEx(SDL_GPUDevice* device, const std::string& path) {
-    return GPUGraphicsPipelineEx(device, path);
+GPUTextureEx::GPUTextureEx(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info) {
+    std::optional<GPUTexture> texture = CreateGPUTexture(device, create_info);
+    if (texture) {
+        m_texture = std::move(*texture);
+    }
+    m_create_info = create_info;
+}
+
+void GPUTextureEx::EnsureSize(u32 width, u32 height, u32 depth) {
+    if (m_create_info.width != width || m_create_info.height != height || m_create_info.layer_count_or_depth != depth) {
+        m_create_info.width                = width;
+        m_create_info.height               = height;
+        m_create_info.layer_count_or_depth = depth;
+
+        std::optional<GPUTexture> new_texture = CreateGPUTexture(m_texture.get_deleter().device, m_create_info);
+        if (new_texture) {
+            m_texture = std::move(*new_texture);
+        }
+    }
 }
 
 ImGuiHelper::ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window) :
@@ -394,7 +612,6 @@ ImGuiHelper::ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window) :
         .ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(device, window)
     };
     ImGui_ImplSDLGPU3_Init(&init_info);
-
 }
 
 ImGuiHelper::~ImGuiHelper() {
@@ -428,4 +645,5 @@ void ImGuiHelper::DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_G
     ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), command_buffer, render_pass);
     SDL_EndGPURenderPass(render_pass);
 }
+
 

@@ -63,7 +63,7 @@ int main() {
         }
     };
 
-    SDL_GPUGraphicsPipelineCreateInfo gfx_info = {
+    GPUGraphicsPipeline gfx_pipeline = CreateGPUGraphicsPipeline(device.get(), {
         .vertex_shader = vs.get(),
         .fragment_shader = fs.get(),
         .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
@@ -80,8 +80,7 @@ int main() {
             .num_color_targets        = color_targets.size(),
             .has_depth_stencil_target = false,
         }
-    };
-    GPUGraphicsPipeline gfx_pipeline = CreateGPUGraphicsPipeline(device.get(), gfx_info);
+    });
 
     MainLoop(MainLoopCallbacks{
         .on_event = [&](const SDL_Event& event) -> bool {
@@ -118,9 +117,7 @@ int main() {
                     .sampler = sampler.get(),
                 };
                 SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
-
                 SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
-
                 SDL_EndGPURenderPass(render_pass);
 
                 imgui.NewFrame();

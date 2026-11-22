@@ -1,5 +1,8 @@
 #pragma once
 
+//
+// Basic resources; thin SDL_* wrappers
+//
 struct ResourceDeleter {
     SDL_GPUDevice* device = nullptr;
 
@@ -30,7 +33,6 @@ struct ResourceDeleter {
     }
 };
 
-// Basic resources; thin SDL_* wrappers
 using Window              = std::unique_ptr<SDL_Window, ResourceDeleter>;
 using GPUDevice           = std::unique_ptr<SDL_GPUDevice, ResourceDeleter>;
 using GPUBuffer           = std::unique_ptr<SDL_GPUBuffer, ResourceDeleter>;
@@ -40,7 +42,9 @@ using GPUShader           = std::unique_ptr<SDL_GPUShader, ResourceDeleter>;
 using GPUTexture          = std::unique_ptr<SDL_GPUTexture, ResourceDeleter>;
 using GPUSampler          = std::unique_ptr<SDL_GPUSampler, ResourceDeleter>;
 
+//
 // Shader utilities; mainly used internally
+//
 struct ReflectionData {
     u32 num_samplers;
     u32 num_readonly_storage_textures;
@@ -51,36 +55,41 @@ struct ReflectionData {
     u32 threadcount_x;
     u32 threadcount_y;
     u32 threadcount_z;
+    std::vector<SDL_GPUVertexAttribute> vertex_attributes;
 };
 
 using ShaderDefineVector = std::vector<std::pair<std::string, std::string>>;
 
-std::vector<u32> CompileShader(const std::string& path, EShLanguage stage, const ShaderDefineVector& defines);
-ReflectionData ReflectShader(std::span<u32> spirv_code);
+std::optional<std::vector<u32>> CompileShader(const std::string& path, EShLanguage stage, const ShaderDefineVector& defines);
+std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code);
 
+//
 // Create* functions for the basic resources we wrapped
-Window CreateWindow(const std::string& title, int w, int h);
+//
+std::optional<Window> CreateWindow(const std::string& title, int w, int h);
 
-GPUDevice CreateGPUDevice();
+std::optional<GPUDevice> CreateGPUDevice();
 
-GPUBuffer CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info);
+std::optional<GPUBuffer> CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info);
 
-GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info);
-GPUComputePipeline CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path, ShaderDefineVector defines = {});
+std::optional<GPUComputePipeline> CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info);
+std::optional<GPUComputePipeline> CreateGPUComputePipeline(SDL_GPUDevice* device, const std::string& path, ShaderDefineVector defines = {}, ReflectionData* reflection = nullptr);
 
-GPUGraphicsPipeline CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info);
+std::optional<GPUGraphicsPipeline> CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info);
 
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info, const ShaderDefineVector& defines = {});
-GPUShader CreateGPUShader(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines = {});
-GPUShader CreateGPUShaderVertex(SDL_GPUDevice* device, const std::string& path);
-GPUShader CreateGPUShaderFragment(SDL_GPUDevice* device, const std::string& path);
+std::optional<GPUShader> CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info, const ShaderDefineVector& defines = {});
+std::optional<GPUShader> CreateGPUShader(SDL_GPUDevice* device, const std::string& path, const ShaderDefineVector& defines = {}, ReflectionData* reflection = nullptr);
+std::optional<GPUShader> CreateGPUShaderVertex(SDL_GPUDevice* device, const std::string& path, ReflectionData* reflection = nullptr);
+std::optional<GPUShader> CreateGPUShaderFragment(SDL_GPUDevice* device, const std::string& path, ReflectionData* reflection = nullptr);
 
-GPUTexture CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
-GPUSampler CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info);
+std::optional<GPUTexture> CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
+std::optional<GPUSampler> CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info);
 
-// Extented resources; these encapsulate a basic resource + some metadata and functionality
-class GPUComputePipelineEx {
-public:
+//
+// Extented resources; these encapsulate a basic resource + some metadata and
+// functionality
+//
+struct GPUComputePipelineEx {
     GPUComputePipelineEx() = default;
     GPUComputePipelineEx(
         SDL_GPUDevice* device,
@@ -94,16 +103,16 @@ public:
         std::span<const SDL_GPUStorageBufferReadWriteBinding> buffers);
     void SetDefines(ShaderDefineVector defines);
     void DispatchAsPass(SDL_GPUCommandBuffer* command_buffer, u32 work_x, u32 work_y, u32 work_z) const;
+    auto Get() { return m_pipeline.get(); }
 private:
     bool RebuildPipeline();
 
-    SDL_GPUDevice* m_device;
-    std::string m_path;
-    GPUComputePipeline m_pipeline;
+    std::string                     m_path;
+    GPUComputePipeline              m_pipeline;
     std::filesystem::file_time_type m_last_write_time;
 
     std::vector<SDL_GPUStorageTextureReadWriteBinding> m_texture_bindings;
-    std::vector<SDL_GPUStorageBufferReadWriteBinding> m_buffer_bindings;
+    std::vector<SDL_GPUStorageBufferReadWriteBinding>  m_buffer_bindings;
 
     ShaderDefineVector m_defines;
 
@@ -112,27 +121,38 @@ private:
     u32 m_thread_count_z = 1;
 };
 
-// TODO
-class GPUGraphicsPipelineEx {
-public:
+struct GPUGraphicsPipelineEx {
     GPUGraphicsPipelineEx() = default;
-    GPUGraphicsPipelineEx(SDL_GPUDevice* device, const std::string& path);
+    // The `vertex_shader`, `fragment_shader` and `vertex_input_state` fields
+    // of `SDL_GPUGraphicsPipelineCreateInfo` are automatically filled via
+    // shader compilation/reflection.
+    GPUGraphicsPipelineEx(SDL_GPUDevice* device, const std::string& path, const SDL_GPUGraphicsPipelineCreateInfo& create_info);
 
     void ReloadIfModified();
-    void DispatchAsPass() const;
+    auto Get() { return m_pipeline.get(); }
 private:
     bool RebuildPipeline();
 
-    SDL_GPUDevice* m_device;
     std::string m_path;
     GPUGraphicsPipeline m_pipeline;
+    SDL_GPUGraphicsPipelineCreateInfo m_create_info;
     std::filesystem::file_time_type m_last_write_time;
-
-    // Bindings?
 };
 
-// ImGui helper. Must be defined only once and passed by reference if needed.
+struct GPUTextureEx {
+    GPUTextureEx(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
+
+    void EnsureSize(u32 width, u32 height, u32 depth = 1);
+    auto Get() { return m_texture.get(); }
+private:
+    GPUTexture m_texture;
+    SDL_GPUTextureCreateInfo m_create_info;
+};
+
+//
+// ImGui RAII helper. Must be defined only once and passed by reference if needed.
 // Eliminates some boilerplate
+//
 struct ImGuiHelper {
     ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window);
     ~ImGuiHelper();
@@ -147,4 +167,5 @@ struct ImGuiHelper {
 private:
     SDL_GPUDevice* m_device;
 };
+
 
