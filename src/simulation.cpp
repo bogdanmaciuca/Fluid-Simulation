@@ -18,7 +18,7 @@ Simulation::Simulation(SDL_GPUDevice* device) :
         SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
         SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
         SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-    m_ssbo = CreateGPUBuffer(m_device, { .usage = usage, .size = SSBO_SIZE });
+    m_ssbo = CreateGPUBuffer(m_device, { .usage = usage, .size = SSBO_SIZE }).value();
 
     m_sort_pipeline = GPUComputePipelineEx(device, SORT_PATH);
 }

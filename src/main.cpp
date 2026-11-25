@@ -7,10 +7,10 @@ constexpr u32 TEXTURE_HEIGHT = 800;
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
 
-    Window window = CreateWindow("Fluid Simulation", 1200, 800);
+    Window window = CreateWindow("Fluid Simulation", 1200, 800).value();
     assert(window != nullptr);
 
-    GPUDevice device = CreateGPUDevice();
+    GPUDevice device = CreateGPUDevice().value();
     SDL_ClaimWindowForGPUDevice(device.get(), window.get());
 
     ImGuiHelper imgui(device.get(), window.get());
@@ -24,7 +24,7 @@ int main() {
         .layer_count_or_depth = 1,
         .num_levels           = 1,
         .sample_count         = SDL_GPU_SAMPLECOUNT_1,
-    });
+    }).value();
 
     GPUSampler sampler = CreateGPUSampler(device.get(), {
         .min_filter       = SDL_GPU_FILTER_LINEAR,
@@ -35,7 +35,7 @@ int main() {
         .address_mode_w   = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
         .min_lod          = 0.0f,
         .max_lod          = 0.0f,
-    });
+    }).value();
 
     GPUComputePipelineEx compute(
         device.get(),
@@ -54,31 +54,15 @@ int main() {
         {}
     );
 
-    GPUShader vs = CreateGPUShaderVertex(device.get(), "shaders/fullscreen.glsl");
-    GPUShader fs = CreateGPUShaderFragment(device.get(), "shaders/fullscreen.glsl");
-
     std::array color_targets = {
         SDL_GPUColorTargetDescription{
             .format = SDL_GetGPUSwapchainTextureFormat(device.get(), window.get())
         }
     };
-
-    GPUGraphicsPipeline gfx_pipeline = CreateGPUGraphicsPipeline(device.get(), {
-        .vertex_shader = vs.get(),
-        .fragment_shader = fs.get(),
-        .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-        .rasterizer_state = {
-            .fill_mode = SDL_GPU_FILLMODE_FILL,
-            .cull_mode = SDL_GPU_CULLMODE_NONE,
-            .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
-        },
-        .multisample_state = {
-            .sample_count = SDL_GPU_SAMPLECOUNT_1,
-        },
+    GPUGraphicsPipelineEx gfx_pipeline(device.get(), "shaders/fullscreen.glsl", {
         .target_info = {
             .color_target_descriptions = color_targets.data(),
             .num_color_targets        = color_targets.size(),
-            .has_depth_stencil_target = false,
         }
     });
 
@@ -88,6 +72,7 @@ int main() {
         },
         .variable_update = [&](float dt) {
             compute.ReloadIfModified();
+            gfx_pipeline.ReloadIfModified();
         },
         .fixed_update = [&](float dt) {},
         .render = [&]() {
@@ -110,7 +95,7 @@ int main() {
                 };
                 SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target, 1, nullptr);
 
-                SDL_BindGPUGraphicsPipeline(render_pass, gfx_pipeline.get());
+                SDL_BindGPUGraphicsPipeline(render_pass, gfx_pipeline.Get());
 
                 SDL_GPUTextureSamplerBinding sampler_binding = {
                     .texture = texture.get(),
