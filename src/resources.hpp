@@ -143,8 +143,14 @@ private:
 struct GPUTextureEx {
     GPUTextureEx(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
 
+    // Resizes the texture if one of the dimensions is less than the required
+    // ones. All data gets erased.
     void EnsureSize(u32 width, u32 height, u32 depth = 1);
+    // Resizes the texture if the dimensions don't match exactly. All data gets
+    // erased.
+    void Resize(u32 width, u32 height, u32 depth = 1);
     auto Get() { return m_texture.get(); }
+    auto GetCreateInfo() const { return m_create_info; }
 private:
     GPUTexture m_texture;
     SDL_GPUTextureCreateInfo m_create_info;
@@ -164,9 +170,12 @@ struct ImGuiHelper {
 
     void NewFrame();
     void EndFrame();
-    void DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_GPUTexture* texture);
+    void ControlPanelAndScene(GPUTextureEx& scene_texture, std::function<void(float, float)> control_panel);
+    void DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_GPUTexture* texture, bool clear = false);
 private:
     SDL_GPUDevice* m_device;
+
+    ImGuiIO* m_io;
 };
 
 

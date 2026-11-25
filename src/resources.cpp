@@ -589,7 +589,30 @@ GPUTextureEx::GPUTextureEx(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo
 }
 
 void GPUTextureEx::EnsureSize(u32 width, u32 height, u32 depth) {
-    if (m_create_info.width != width || m_create_info.height != height || m_create_info.layer_count_or_depth != depth) {
+    if (
+        !m_texture ||
+        m_create_info.width < width ||
+        m_create_info.height < height ||
+        m_create_info.layer_count_or_depth < depth
+    ) {
+        m_create_info.width                = width;
+        m_create_info.height               = height;
+        m_create_info.layer_count_or_depth = depth;
+
+        std::optional<GPUTexture> new_texture = CreateGPUTexture(m_texture.get_deleter().device, m_create_info);
+        if (new_texture) {
+            m_texture = std::move(*new_texture);
+        }
+    }
+}
+
+void GPUTextureEx::Resize(u32 width, u32 height, u32 depth) {
+    if (
+        !m_texture ||
+        m_create_info.width != width ||
+        m_create_info.height != height ||
+        m_create_info.layer_count_or_depth != depth
+    ) {
         m_create_info.width                = width;
         m_create_info.height               = height;
         m_create_info.layer_count_or_depth = depth;
@@ -612,6 +635,8 @@ ImGuiHelper::ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window) :
         .ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(device, window)
     };
     ImGui_ImplSDLGPU3_Init(&init_info);
+    m_io = &ImGui::GetIO();
+    m_io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 }
 
 ImGuiHelper::~ImGuiHelper() {
@@ -631,12 +656,12 @@ void ImGuiHelper::EndFrame() {
     ImGui::Render();
 }
 
-void ImGuiHelper::DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_GPUTexture* texture) {
+void ImGuiHelper::DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_GPUTexture* texture, bool clear) {
     ImGui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), command_buffer);
 
     SDL_GPUColorTargetInfo color_target = {
         .texture     = texture,
-        .load_op     = SDL_GPU_LOADOP_LOAD,
+        .load_op     = clear ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD,
         .store_op    = SDL_GPU_STOREOP_STORE,
     };
 
@@ -646,4 +671,34 @@ void ImGuiHelper::DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_G
     SDL_EndGPURenderPass(render_pass);
 }
 
+void ImGuiHelper::ControlPanelAndScene(GPUTextureEx& scene_texture, std::function<void(float, float)> control_panel) {
+    NewFrame();
+    ImGuiWindowFlags window_flags =
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse;
+
+    ImGui::DockSpaceOverViewport(
+        0,
+        ImGui::GetMainViewport(),
+        ImGuiDockNodeFlags_PassthruCentralNode
+    );
+
+    ImGui::Begin("Control Panel", nullptr, window_flags);
+    ImGui::End();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("Simulation", nullptr, window_flags);
+    auto available_scene_region = ImGui::GetContentRegionAvail();
+    control_panel(available_scene_region.x, available_scene_region.y);
+    ImGui::Image(
+        (ImTextureID)scene_texture.Get(),
+        ImVec2(scene_texture.GetCreateInfo().width, scene_texture.GetCreateInfo().height)
+    );
+
+    ImGui::End();
+
+    ImGui::PopStyleVar(2);
+    EndFrame();
+}
 

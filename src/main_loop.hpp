@@ -8,9 +8,8 @@ using OnEventFunc = std::function<bool(const SDL_Event& event)>;
 
 struct MainLoopCallbacks {
     OnEventFunc on_event;
-    UpdateFunc  variable_update;
     UpdateFunc  fixed_update;
-    RenderFunc  render;
+    UpdateFunc  variable_update;
 };
 
 void MainLoop(const MainLoopCallbacks& callbacks);

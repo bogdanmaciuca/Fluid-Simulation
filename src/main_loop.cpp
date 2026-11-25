@@ -15,8 +15,6 @@ void MainLoop(const MainLoopCallbacks& callbacks) {
         while (SDL_PollEvent(&event)) {
             // Hand over event to ImGui
             ImGui_ImplSDL3_ProcessEvent(&event);
-            // Don't process it ourselves if it was meant for ImGui
-            if (ImGui::GetIO().WantCaptureMouse) continue;
 
             // User callback. Don't handle event here if user handled it already.
             if (callbacks.on_event(event)) continue;
@@ -38,7 +36,6 @@ void MainLoop(const MainLoopCallbacks& callbacks) {
 
         if (callbacks.variable_update) {
             callbacks.variable_update(frame_time);
-            callbacks.render();
         }
     }
 }

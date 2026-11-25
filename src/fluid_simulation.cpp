@@ -18,7 +18,11 @@ struct ResetUBO {
     alignas(16) ivec3 grid_size;
 };
 
-FluidSimulation::FluidSimulation(SDL_GPUDevice* device, SDL_GPUTransferBuffer* transfer_buffer) :
+FluidSimulation::FluidSimulation(
+    SDL_GPUDevice* device,
+    SDL_GPUTransferBuffer* transfer_buffer,
+    const ivec3& grid_size
+) :
     m_device(device),
     m_transfer_buffer(transfer_buffer)
 {
