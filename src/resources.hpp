@@ -58,7 +58,8 @@ struct ReflectionData {
     std::vector<SDL_GPUVertexAttribute> vertex_attributes;
 };
 
-using ShaderDefineVector = std::vector<std::pair<std::string, std::string>>;
+using ShaderDefine       = std::pair<std::string, std::string>;
+using ShaderDefineVector = std::vector<ShaderDefine>;
 
 std::optional<std::vector<u32>> CompileShader(const std::string& path, EShLanguage stage, const ShaderDefineVector& defines);
 std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code);

@@ -15,67 +15,19 @@ int main() {
 
     ImGuiHelper imgui(device.get(), window.get());
 
-    GPUTexture texture = CreateGPUTexture(device.get(), {
-        .type                 = SDL_GPU_TEXTURETYPE_2D,
-        .format               = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
-        .usage                = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,
-        .width                = TEXTURE_WIDTH,
-        .height               = TEXTURE_HEIGHT,
-        .layer_count_or_depth = 1,
-        .num_levels           = 1,
-        .sample_count         = SDL_GPU_SAMPLECOUNT_1,
-    }).value();
-
-    GPUSampler sampler = CreateGPUSampler(device.get(), {
-        .min_filter       = SDL_GPU_FILTER_LINEAR,
-        .mag_filter       = SDL_GPU_FILTER_LINEAR,
-        .mipmap_mode      = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
-        .address_mode_u   = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_v   = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_w   = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .min_lod          = 0.0f,
-        .max_lod          = 0.0f,
-    }).value();
-
-    GPUComputePipelineEx compute(
-        device.get(),
-        "shaders/compute.comp",
-        {{"VALUE", "1.0"}}
-    );
-    compute.SetBindings(
-        std::array{
-            SDL_GPUStorageTextureReadWriteBinding{
-                .texture = texture.get(),
-                .mip_level = 0,
-                .layer = 0,
-                .cycle = false,
-            }
-        },
-        {}
-    );
-
-    std::array color_targets = {
-        SDL_GPUColorTargetDescription{
-            .format = SDL_GetGPUSwapchainTextureFormat(device.get(), window.get())
-        }
-    };
-    GPUGraphicsPipelineEx gfx_pipeline(device.get(), "shaders/fullscreen.glsl", {
-        .target_info = {
-            .color_target_descriptions = color_targets.data(),
-            .num_color_targets        = color_targets.size(),
-        }
-    });
-
     MainLoop(MainLoopCallbacks{
         .on_event = [&](const SDL_Event& event) -> bool {
             return false;
         },
         .variable_update = [&](float dt) {
-            compute.ReloadIfModified();
-            gfx_pipeline.ReloadIfModified();
         },
         .fixed_update = [&](float dt) {},
         .render = [&]() {
+            imgui.NewFrame();
+            ImGui::Begin("Control panel");
+            ImGui::End();
+            imgui.EndFrame();
+
             SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(device.get());
             assert(command_buffer != nullptr);
 
@@ -85,8 +37,6 @@ int main() {
                 command_buffer, window.get(), &swapchain_texture, &swapchain_texture_width, &swapchain_texture_height);
 
             if (swapchain_texture != nullptr) {
-                compute.DispatchAsPass(command_buffer, TEXTURE_WIDTH, TEXTURE_HEIGHT, 1);
-
                 SDL_GPUColorTargetInfo color_target = {
                     .texture     = swapchain_texture,
                     .clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f},
@@ -94,21 +44,7 @@ int main() {
                     .store_op    = SDL_GPU_STOREOP_STORE,
                 };
                 SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target, 1, nullptr);
-
-                SDL_BindGPUGraphicsPipeline(render_pass, gfx_pipeline.Get());
-
-                SDL_GPUTextureSamplerBinding sampler_binding = {
-                    .texture = texture.get(),
-                    .sampler = sampler.get(),
-                };
-                SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
-                SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
                 SDL_EndGPURenderPass(render_pass);
-
-                imgui.NewFrame();
-                ImGui::Begin("Hello byatch");
-                ImGui::End();
-                imgui.EndFrame();
 
                 imgui.DispatchRenderPass(command_buffer, swapchain_texture);
             }
