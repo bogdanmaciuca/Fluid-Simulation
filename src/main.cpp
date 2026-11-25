@@ -18,7 +18,7 @@ int main() {
     GPUTextureEx scene_texture(device.get(), {
         .type                 = SDL_GPU_TEXTURETYPE_2D,
         .format               = SDL_GetGPUSwapchainTextureFormat(device.get(), window.get()),
-        .usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET              | SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        .usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER,
         .width                = DEFAULT_WND_W,
         .height               = DEFAULT_WND_H,
         .layer_count_or_depth = 1,
