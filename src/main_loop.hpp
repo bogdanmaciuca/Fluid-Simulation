@@ -1,6 +1,6 @@
 #pragma once
 
-constexpr float FIXED_TIMESTEP = 0.01666f; // 60Hz
+constexpr double FIXED_TIMESTEP = 0.01666; // 60Hz
 
 using UpdateFunc = std::function<void(float dt)>;
 using RenderFunc = std::function<void()>;

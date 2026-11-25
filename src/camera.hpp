@@ -7,40 +7,40 @@ enum class CameraMovement {
     Right
 };
 
-constexpr float DEFAULT_YAW         = -90.0f;
-constexpr float DEFAULT_PITCH       =  0.0f;
-constexpr float DEFAULT_SPEED       =  2.5f;
-constexpr float DEFAULT_SENSITIVITY =  0.1f;
-constexpr float DEFAULT_ZOOM        =  45.0f;
+constexpr double DEFAULT_YAW         = -90.0;
+constexpr double DEFAULT_PITCH       =  0.0;
+constexpr double DEFAULT_SPEED       =  2.5;
+constexpr double DEFAULT_SENSITIVITY =  0.1;
+constexpr double DEFAULT_ZOOM        =  45.0;
 
 class Camera {
 public:
-    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = DEFAULT_YAW, float pitch = DEFAULT_PITCH);
+    Camera(glm::dvec3 position = glm::dvec3(0.0, 0.0, 0.0), glm::dvec3 up = glm::dvec3(0.0, 1.0, 0.0), double yaw = DEFAULT_YAW, double pitch = DEFAULT_PITCH);
 
-    void ProcessKeyboard(CameraMovement direction, float deltaTime);
-    void ProcessMouseMovement(float xoffset, float yoffset, bool constrainPitch = true);
-    void ProcessMouseScroll(float yoffset);
+    void ProcessKeyboard(CameraMovement direction, double deltaTime);
+    void ProcessMouseMovement(double xoffset, double yoffset, bool constrainPitch = true);
+    void ProcessMouseScroll(double yoffset);
 
-    glm::mat4 GetViewMatrix() const;
+    glm::dmat4 GetViewMatrix() const;
 
-    float GetZoom() const { return m_zoom; }
-    glm::vec3 GetPosition() const { return m_position; }
-    glm::vec3 GetFront() const { return m_front; }
+    double GetZoom() const { return m_zoom; }
+    glm::dvec3 GetPosition() const { return m_position; }
+    glm::dvec3 GetFront() const { return m_front; }
 
 private:
     void UpdateCameraVectors();
 
-    glm::vec3 m_position;
-    glm::vec3 m_front;
-    glm::vec3 m_up;
-    glm::vec3 m_right;
-    glm::vec3 m_world_up;
+    glm::dvec3 m_position;
+    glm::dvec3 m_front;
+    glm::dvec3 m_up;
+    glm::dvec3 m_right;
+    glm::dvec3 m_world_up;
 
-    float m_yaw;
-    float m_pitch;
+    double m_yaw;
+    double m_pitch;
 
-    float m_movement_speed;
-    float m_mouse_sensitivity;
-    float m_zoom;
+    double m_movement_speed;
+    double m_mouse_sensitivity;
+    double m_zoom;
 };
 
