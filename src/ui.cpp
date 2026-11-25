@@ -1,22 +1,54 @@
 #include "ui.hpp"
+#include "timer.hpp"
+#include "physics/physics.hpp"
 
 void UIDrawFrame() {
     auto& io = ImGui::GetIO();
 
-    auto SliderAsMilli = [](const char* label, float* base_val, float min_milli, float max_milli) {
-        float milli = *base_val * 1000.0f;
-        bool changed = ImGui::SliderFloat(label, &milli, min_milli, max_milli);
+    auto SliderAsMilli = [](const char* label, double* base_val, double min_milli, double max_milli) {
+        double milli = *base_val * 1000.0;
+        bool changed = ImGui::SliderScalar(label, ImGuiDataType_Double, &milli, &min_milli, &max_milli);
         if (changed) {
-            *base_val = milli * 0.001f;
+            *base_val = milli * 0.001;
         }
         return changed;
     };
 
     ImGui::Begin("Control Panel");
-    SliderAsMilli("Timestep (ms)", &g_ui.timestep, 1.0f, 50.0f);
-    SliderAsMilli("Speed", &g_ui.speed, 0.01f, 2.0f);
-    SliderAsMilli("Particle separation (mm)", &g_ui.particle_separation, 5.0f, 50.0f);
-    ImGui::SliderFloat3("Box size (m)", &g_ui.box_size.x, 0.25f, 5.0f);
+
+    ImGui::Checkbox("OOP", &g_ui.oop);
+    ImGui::Checkbox("Render grid", &g_ui.render_grid);
+    ImGui::Text("Particles: %u", PhysicsGetParticleNum());
+    ImGui::Separator();
+
+    {
+        double speed_min = 0.01, speed_max = 2.0;
+        ImGui::SliderScalar("Speed", ImGuiDataType_Double, &g_ui.speed, &speed_min, &speed_max);
+    }
+    SliderAsMilli("Particle radius (mm)", &g_ui.particle_radius, 1.0, 25.0);
+    {
+        double box_min = 1.0f, box_max = 2.0;
+        ImGui::SliderScalarN("Box size (m)", ImGuiDataType_Double, &g_ui.box_size.x, 3, &box_min, &box_max);
+    }
+    {
+        double g_min = -50.0, g_max = 50.0;
+        ImGui::SliderScalar("Gravity (m^2/s)", ImGuiDataType_Double, &g_ui.gravity, &g_min, &g_max);
+    }
+    {
+        double v_min = 0.0, v_max = 1.0;
+        ImGui::SliderScalar("Viscosity", ImGuiDataType_Double, &g_ui.viscosity, &v_min, &v_max);
+    }
+    {
+        double r_min = 0.0, r_max = 1.0;
+        ImGui::SliderScalar("Restitution", ImGuiDataType_Double, &g_ui.restitution, &r_min, &r_max);
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Timings (avg ms)");
+    for (const auto& [name, stats] : timers::Entries()) {
+        ImGui::Text("%.*s: %.3f", (int)name.size(), name.data(), stats.avg_seconds * 1000.0);
+    }
+
     ImGui::End();
 }
 
