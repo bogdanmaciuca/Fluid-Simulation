@@ -29,7 +29,7 @@ layout(location = 1) in vec3 f_barycentric;
 layout(location = 0) out vec4 out_color;
 
 const float EDGE_THICKNESS = 2.0;
-const float EDGE_DARKNESS  = 0.15;
+const float EDGE_DARKNESS  = 0.10;
 const float OPACITY = 0.5;
 
 void main() {
@@ -37,9 +37,6 @@ void main() {
     vec3 smoothed = smoothstep(vec3(0.0), d * EDGE_THICKNESS, f_barycentric);
     float edge    = min(min(smoothed.x, smoothed.y), smoothed.z);
     float shade   = mix(1.0 - EDGE_DARKNESS, 1.0, edge);
-    // if (!gl_FrontFacing) {
-    //     shade *= 0.9;
-    // }
     out_color = vec4(f_color * shade, OPACITY);
 }
 #endif
