@@ -1,7 +1,6 @@
-#include "resources.hpp"
+#include "helpers.hpp"
 
-#include <algorithm>
-
+#include "imgui.h"
 #include "util.hpp"
 
 namespace {
@@ -419,6 +418,15 @@ std::optional<GPUTexture> CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUT
     return GPUTexture(texture, ResourceDeleter{ device });
 }
 
+std::optional<GPUTransferBuffer> CreateGPUTransferBuffer(SDL_GPUDevice* device, const SDL_GPUTransferBufferCreateInfo& create_info) {
+    auto transfer_buffer = SDL_CreateGPUTransferBuffer(device, &create_info);
+    if (transfer_buffer == nullptr) {
+        std::cerr << "Failed to create GPU transfer buffer: " << SDL_GetError() << std::endl;
+        return std::nullopt;
+    }
+    return GPUTransferBuffer(transfer_buffer, ResourceDeleter{ device });
+}
+
 std::optional<GPUSampler> CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info) {
     auto sampler = SDL_CreateGPUSampler(device, &create_info);
     if (sampler == nullptr) {
@@ -519,6 +527,16 @@ GPUGraphicsPipelineEx::GPUGraphicsPipelineEx(
     m_create_info(create_info)
 {
     m_pipeline.get_deleter().device = device;
+
+    if (create_info.target_info.num_color_targets > 0 && create_info.target_info.color_target_descriptions != nullptr) {
+        m_color_targets.assign(
+            create_info.target_info.color_target_descriptions,
+            create_info.target_info.color_target_descriptions + create_info.target_info.num_color_targets
+        );
+    }
+    m_create_info.target_info.color_target_descriptions =
+        m_color_targets.empty() ? nullptr : m_color_targets.data();
+
     RebuildPipeline();
 }
 
@@ -539,25 +557,29 @@ bool GPUGraphicsPipelineEx::RebuildPipeline() {
         pitch = std::max(pitch, attribute.offset + VertexElementFormatSize(attribute.format));
     }
 
-    SDL_GPUVertexBufferDescription vertex_buffer = {
-        .slot               = 0,
-        .pitch              = pitch,
-        .input_rate         = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0,
-    };
-
     bool has_vertex_attributes = !vs_refl.vertex_attributes.empty();
 
-    SDL_GPUVertexInputState vertex_input_state = {
-        .vertex_buffer_descriptions = has_vertex_attributes ? &vertex_buffer : nullptr,
-        .num_vertex_buffers         = has_vertex_attributes ? 1u : 0u,
-        .vertex_attributes          = has_vertex_attributes ? vs_refl.vertex_attributes.data() : nullptr,
-        .num_vertex_attributes      = has_vertex_attributes ? static_cast<Uint32>(vs_refl.vertex_attributes.size()) : 0u,
-    };
+    m_vertex_buffers.clear();
+    if (has_vertex_attributes) {
+        m_vertex_buffers.push_back({
+            .slot               = 0,
+            .pitch              = pitch,
+            .input_rate         = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+            .instance_step_rate = 0,
+        });
+    }
+
+    m_create_info.target_info.color_target_descriptions =
+        m_color_targets.empty() ? nullptr : m_color_targets.data();
 
     m_create_info.vertex_shader = vs->get();
     m_create_info.fragment_shader = fs->get();
-    m_create_info.vertex_input_state = vertex_input_state;
+    m_create_info.vertex_input_state = {
+        .vertex_buffer_descriptions = m_vertex_buffers.empty() ? nullptr : m_vertex_buffers.data(),
+        .num_vertex_buffers         = static_cast<Uint32>(m_vertex_buffers.size()),
+        .vertex_attributes          = has_vertex_attributes ? vs_refl.vertex_attributes.data() : nullptr,
+        .num_vertex_attributes      = has_vertex_attributes ? static_cast<Uint32>(vs_refl.vertex_attributes.size()) : 0u,
+    };
 
     std::optional<GPUGraphicsPipeline> new_pipeline = CreateGPUGraphicsPipeline(
         m_pipeline.get_deleter().device, m_create_info);
@@ -671,11 +693,12 @@ void ImGuiHelper::DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_G
     SDL_EndGPURenderPass(render_pass);
 }
 
-void ImGuiHelper::ControlPanelAndScene(GPUTextureEx& scene_texture, std::function<void(float, float)> control_panel) {
+void ImGuiHelper::ControlPanelAndScene(GPUTextureEx& scene_texture, std::function<void()> control_panel, bool* scene_is_focused) {
     NewFrame();
     ImGuiWindowFlags window_flags =
         ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoScrollWithMouse;
+    window_flags = 0;
 
     ImGui::DockSpaceOverViewport(
         0,
@@ -684,13 +707,19 @@ void ImGuiHelper::ControlPanelAndScene(GPUTextureEx& scene_texture, std::functio
     );
 
     ImGui::Begin("Control Panel", nullptr, window_flags);
+    control_panel();
     ImGui::End();
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("Simulation", nullptr, window_flags);
+
+    if (scene_is_focused) {
+        *scene_is_focused = ImGui::IsWindowHovered();
+    }
+
     auto available_scene_region = ImGui::GetContentRegionAvail();
-    control_panel(available_scene_region.x, available_scene_region.y);
+    scene_texture.Resize(available_scene_region.x, available_scene_region.y);
     ImGui::Image(
         (ImTextureID)scene_texture.Get(),
         ImVec2(scene_texture.GetCreateInfo().width, scene_texture.GetCreateInfo().height)

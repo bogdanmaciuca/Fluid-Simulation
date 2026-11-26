@@ -28,6 +28,9 @@ struct ResourceDeleter {
     void operator()(SDL_GPUTexture* ptr) const {
         SDL_ReleaseGPUTexture(device, ptr);
     }
+    void operator()(SDL_GPUTransferBuffer* ptr) const {
+        SDL_ReleaseGPUTransferBuffer(device, ptr);
+    }
     void operator()(SDL_GPUSampler* ptr) const {
         SDL_ReleaseGPUSampler(device, ptr);
     }
@@ -40,6 +43,7 @@ using GPUComputePipeline  = std::unique_ptr<SDL_GPUComputePipeline, ResourceDele
 using GPUGraphicsPipeline = std::unique_ptr<SDL_GPUGraphicsPipeline, ResourceDeleter>;
 using GPUShader           = std::unique_ptr<SDL_GPUShader, ResourceDeleter>;
 using GPUTexture          = std::unique_ptr<SDL_GPUTexture, ResourceDeleter>;
+using GPUTransferBuffer   = std::unique_ptr<SDL_GPUTransferBuffer, ResourceDeleter>;
 using GPUSampler          = std::unique_ptr<SDL_GPUSampler, ResourceDeleter>;
 
 //
@@ -84,6 +88,9 @@ std::optional<GPUShader> CreateGPUShaderVertex(SDL_GPUDevice* device, const std:
 std::optional<GPUShader> CreateGPUShaderFragment(SDL_GPUDevice* device, const std::string& path, ReflectionData* reflection = nullptr);
 
 std::optional<GPUTexture> CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
+
+std::optional<GPUTransferBuffer> CreateGPUTransferBuffer(SDL_GPUDevice* device, const SDL_GPUTransferBufferCreateInfo& create_info);
+
 std::optional<GPUSampler> CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info);
 
 //
@@ -138,9 +145,12 @@ private:
     GPUGraphicsPipeline m_pipeline;
     SDL_GPUGraphicsPipelineCreateInfo m_create_info;
     std::filesystem::file_time_type m_last_write_time;
+    std::vector<SDL_GPUColorTargetDescription>  m_color_targets;
+    std::vector<SDL_GPUVertexBufferDescription> m_vertex_buffers;
 };
 
 struct GPUTextureEx {
+    GPUTextureEx() = default;
     GPUTextureEx(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info);
 
     // Resizes the texture if one of the dimensions is less than the required
@@ -170,12 +180,11 @@ struct ImGuiHelper {
 
     void NewFrame();
     void EndFrame();
-    void ControlPanelAndScene(GPUTextureEx& scene_texture, std::function<void(float, float)> control_panel);
+    void ControlPanelAndScene(GPUTextureEx& scene_texture, std::function<void()> control_panel, bool* scene_is_focused = nullptr);
     void DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_GPUTexture* texture, bool clear = false);
 private:
     SDL_GPUDevice* m_device;
 
     ImGuiIO* m_io;
 };
-
 

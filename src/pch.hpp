@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
-#include <functional>
-#include <immintrin.h>
-#include <iostream>
 #include <fstream>
+#include <functional>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <span>
+#include <variant>
 #include <vector>
 
 #include "SDL3/SDL.h"
@@ -46,4 +46,8 @@ using vec4  = glm::vec4;
 using ivec2 = glm::ivec2;
 using ivec3 = glm::ivec3;
 using ivec4 = glm::ivec4;
+using mat3  = glm::mat3;
 using mat4  = glm::mat4;
+
+template<typename... Ts>
+struct overloaded : Ts... { using Ts::operator()...; };

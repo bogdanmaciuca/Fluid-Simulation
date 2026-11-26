@@ -1,14 +1,17 @@
 #pragma once
-#include "resources.hpp"
+#include "../helpers.hpp"
 
 struct FluidSimulation {
     static constexpr size_t PARTICLE_BYTE_SIZE =
         sizeof(vec3)  + // position
         sizeof(vec3)  + // velocity
+        sizeof(vec3)  + // sorted_position
+        sizeof(vec3)  + // sorted_velocity
         sizeof(vec3)  + // predicted_position
         sizeof(float) + // density
         sizeof(float) + // lambda
         sizeof(vec3)  + // vorticity
+        sizeof(mat3)  + // anisotropic covariance
         sizeof(vec3);   // color
     static constexpr size_t PARTICLE_MAX_NUM = 100'000;
     static constexpr size_t SSBO_SIZE = PARTICLE_MAX_NUM * PARTICLE_BYTE_SIZE;
