@@ -66,6 +66,26 @@ int main() {
         }
     });
 
+
+    // the temporary variables modified by imgui
+    glm::vec3 box_dimensions = { 1.0f, 1.0f, 1.0f };
+    glm::vec3 gravity = { 0.0f, -9.81f, 0.0f };
+    // the vectors
+    struct Force{
+    int id;
+    int type = 0;
+
+    glm::vec3 origin = { 0.0f, 0.0f, 0.0f };
+    glm::vec3 direction = { 0.0f, 0.0f, 0.0f };
+
+    glm::vec3 position = { 0.0f, 0.0f, 0.0f };
+    float force = 0.0f;
+    };
+    std::vector<Force> forces;
+    std::vector<int> ships;
+
+    int next_force_id = 1, next_ship_id = 1;
+
     MainLoop(MainLoopCallbacks{
         .on_event = [&](const SDL_Event& event) -> bool {
             return false;
@@ -106,7 +126,165 @@ int main() {
                 SDL_EndGPURenderPass(render_pass);
 
                 imgui.NewFrame();
-                ImGui::Begin("Hello byatch");
+                ImGui::Begin("Simulation Configuration");
+                // BOX DIMENSIONS
+                ImGui::SeparatorText("Box Dimensions");
+                
+                const float available_width = ImGui::GetContentRegionAvail().x;
+                const float label_width = ImGui::CalcTextSize("X").x + ImGui::GetStyle().ItemSpacing.x;
+                const float input_width = (available_width - (label_width * 3) - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("X");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                ImGui::InputFloat("##BoxX", &box_dimensions.x);
+
+                ImGui::SameLine();
+                ImGui::Text("Y");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                ImGui::InputFloat("##BoxY", &box_dimensions.y);
+
+                ImGui::SameLine();
+                ImGui::Text("Z");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                ImGui::InputFloat("##BoxZ", &box_dimensions.z);
+
+                // GRAVITY
+                ImGui::SeparatorText("Gravity");
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("X");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                ImGui::InputFloat("##GravityX", &gravity.x);
+
+                ImGui::SameLine();
+                ImGui::Text("Y");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                ImGui::InputFloat("##GravityY", &gravity.y);
+
+                ImGui::SameLine();
+                ImGui::Text("Z");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                ImGui::InputFloat("##GravityZ", &gravity.z);
+
+                // FORCES
+                ImGui::SeparatorText("Forces");
+
+                if (ImGui::Button("+ Add Force"))
+                {
+                    forces.push_back({next_force_id++});
+                }
+
+                for (int i = 0; i < forces.size(); i++)
+                {
+                    ImGui::PushID(forces[i].id);
+
+                    ImGui::Text("Force %d", forces[i].id);
+
+                    const char* forceTypes[] = { "Unassigned", "Directional", "Point", "Vortex" };
+
+                    ImGui::SameLine();
+                    ImGui::Combo("Type", &forces[i].type, forceTypes, IM_ARRAYSIZE(forceTypes));
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("X"))
+                    {
+                        forces.erase(forces.begin() + i);
+                        ImGui::PopID();
+                        break;
+                    }
+
+                    switch (forces[i].type){
+                            case 0: // Unassigned
+                            {
+                                break;
+                            }
+
+                            case 1: // Directional
+                            {
+                                ImGui::Indent();
+
+                                ImGui::Text("Origin");
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("X##OriginX", &forces[i].origin.x);
+                                ImGui::SameLine();
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("Y##OriginY", &forces[i].origin.y);
+                                ImGui::SameLine();
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("Z##OriginZ", &forces[i].origin.z);
+
+                                ImGui::Text("Direction");
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("X##DirectionX", &forces[i].direction.x);
+                                ImGui::SameLine();
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("Y##DirectionY", &forces[i].direction.y);
+                                ImGui::SameLine();
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("Z##DirectionZ", &forces[i].direction.z);
+
+                                ImGui::Unindent();
+                                break;
+                            }
+
+                            case 2: // Point
+                            {
+                                ImGui::Indent();
+
+                                ImGui::Text("Position");
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("X##PositionX", &forces[i].position.x);
+                                ImGui::SameLine();
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("Y##PositionY", &forces[i].position.y);
+                                ImGui::SameLine();
+                                ImGui::SetNextItemWidth(100.0f);
+                                ImGui::InputFloat("Z##PositionZ", &forces[i].position.z);
+
+                                ImGui::Text("Force");
+                                ImGui::SetNextItemWidth(150.0f);
+                                ImGui::InputFloat("##PointForce", &forces[i].force);
+
+                                ImGui::Unindent();
+                                break;
+                            }
+                        }
+
+                    ImGui::PopID();
+                }
+
+                // SHIPS
+                ImGui::SeparatorText("Ships");
+
+                if (ImGui::Button("+ Add Ship"))
+                {
+                    ships.push_back(next_ship_id++);
+                }
+
+                for (int i = 0; i < ships.size(); i++)
+                {
+                    ImGui::PushID(ships[i]);
+
+                    ImGui::Text("Ship %d", ships[i]);
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("X"))
+                    {
+                        ships.erase(ships.begin() + i);
+                        ImGui::PopID();
+                        break;
+                    }
+
+                    ImGui::PopID();
+                }
+
                 ImGui::End();
                 imgui.EndFrame();
 
