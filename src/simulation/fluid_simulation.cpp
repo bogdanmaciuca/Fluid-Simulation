@@ -40,10 +40,10 @@ FluidSimulation::FluidSimulation(
     m_grid = CreateGPUBuffer(m_device, { .usage = grid_usage, .size = SSBO_SIZE }).value();
 
     // Reset
-    m_reset_pipeline = GPUComputePipelineEx(m_device, RESET_PATH, DEFINES);
+    m_reset_pipeline = GPUComputePipelineEx::Create(m_device, RESET_PATH, DEFINES).value();
 
     // Sort
-    m_sort_pipeline = GPUComputePipelineEx(m_device, SORT_PATH, DEFINES);
+    m_sort_pipeline = GPUComputePipelineEx::Create(m_device, SORT_PATH, DEFINES).value();
     m_sort_pipeline.SetBindings({}, std::array{
         SDL_GPUStorageBufferReadWriteBinding{ .buffer = m_particles.get() },
         SDL_GPUStorageBufferReadWriteBinding{ .buffer = m_particles.get() },
@@ -58,15 +58,6 @@ void FluidSimulation::Reset(SDL_GPUCommandBuffer* command_buffer) {
 
 void FluidSimulation::Run(SDL_GPUCommandBuffer* command_buffer) {
     m_sort_pipeline.DispatchAsPass(command_buffer, m_particle_num, 1, 1);
-}
-
-GPUComputePipelineEx FluidSimulation::CreateSimulationCompute(const char* path) {
-    GPUComputePipelineEx pipeline(m_device, path, DEFINES);
-    pipeline.SetBindings({}, std::array{
-        SDL_GPUStorageBufferReadWriteBinding{ .buffer = m_particles.get() },
-        SDL_GPUStorageBufferReadWriteBinding{ .buffer = m_particles.get() },
-    });
-    return pipeline;
 }
 
 void FluidSimulation::DispatchCompute(const GPUComputePipelineEx& pipeline, SDL_GPUCommandBuffer* command_buffer) {

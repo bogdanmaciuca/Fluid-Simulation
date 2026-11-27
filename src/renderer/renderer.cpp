@@ -10,14 +10,14 @@ Renderer::Renderer(
     m_device(device),
     m_fluid_buffer(fluid_buffer)
 {
-    m_depth_texture = GPUTextureEx(m_device, {
+    m_depth_texture = GPUTextureEx::Create(m_device, {
         .format               = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
         .usage                = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
         .width                = 1200,
         .height               = 800,
         .layer_count_or_depth = 1,
         .num_levels           = 1,
-    });
+    }).value();
 
     m_geometry_buffer = CreateGPUBuffer(m_device, {
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
@@ -36,7 +36,7 @@ Renderer::Renderer(
             .enable_blend          = true,
         }
     };
-    m_geometry_pipeline = GPUGraphicsPipelineEx(m_device, GEOM_SHADER_PATH, {
+    m_geometry_pipeline = GPUGraphicsPipelineEx::Create(m_device, GEOM_SHADER_PATH, {
         .depth_stencil_state = {
             .compare_op = SDL_GPU_COMPAREOP_LESS,
             .enable_depth_test = false,
@@ -48,7 +48,7 @@ Renderer::Renderer(
             .depth_stencil_format = m_depth_texture.GetCreateInfo().format,
             .has_depth_stencil_target = true,
         },
-    });
+    }).value();
 
     m_transfer_buffer = CreateGPUTransferBuffer(m_device, {
         .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,

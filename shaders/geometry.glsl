@@ -30,7 +30,7 @@ layout(location = 0) out vec4 out_color;
 
 const float EDGE_THICKNESS = 2.0;
 const float EDGE_DARKNESS  = 0.10;
-const float OPACITY = 0.5;
+const float OPACITY = 0.4;
 
 void main() {
     vec3 d        = fwidth(f_barycentric);

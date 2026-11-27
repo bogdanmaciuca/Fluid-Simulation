@@ -20,7 +20,7 @@ int main() {
     ImGuiHelper imgui(device.get(), window.get());
     auto& io = ImGui::GetIO();
 
-    GPUTextureEx scene_texture(device.get(), {
+    GPUTextureEx scene_texture = GPUTextureEx::Create(device.get(), {
         .type                 = SDL_GPU_TEXTURETYPE_2D,
         .format               = SDL_GetGPUSwapchainTextureFormat(device.get(), window.get()),
         .usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER,
@@ -28,7 +28,7 @@ int main() {
         .height               = DEFAULT_WND_H,
         .layer_count_or_depth = 1,
         .num_levels           = 1,
-    });
+    }).value();
 
     Renderer renderer(device.get(), scene_texture.GetCreateInfo().format, nullptr);
 

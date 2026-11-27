@@ -42,8 +42,6 @@ private:
     u32 m_particle_num = 0;
     ivec3 m_grid_size;
 
-    // Sets the defines and bindings
-    GPUComputePipelineEx CreateSimulationCompute(const char* path);
     void DispatchCompute(const GPUComputePipelineEx& pipeline, SDL_GPUCommandBuffer* command_buffer);
 };
 

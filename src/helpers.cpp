@@ -1,14 +1,26 @@
 #include "helpers.hpp"
 
 #include "imgui.h"
+#include "log.hpp"
 #include "util.hpp"
 
 namespace {
     u32 VertexElementFormatSize(SDL_GPUVertexElementFormat format) {
         switch (format) {
+            case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT:  return 4;
             case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2: return 8;
             case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3: return 12;
             case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4: return 16;
+            case SDL_GPU_VERTEXELEMENTFORMAT_INT:    return 4;
+            case SDL_GPU_VERTEXELEMENTFORMAT_INT2:   return 8;
+            case SDL_GPU_VERTEXELEMENTFORMAT_INT3:   return 12;
+            case SDL_GPU_VERTEXELEMENTFORMAT_INT4:   return 16;
+            case SDL_GPU_VERTEXELEMENTFORMAT_UINT:   return 4;
+            case SDL_GPU_VERTEXELEMENTFORMAT_UINT2:  return 8;
+            case SDL_GPU_VERTEXELEMENTFORMAT_UINT3:  return 12;
+            case SDL_GPU_VERTEXELEMENTFORMAT_UINT4:  return 16;
+            case SDL_GPU_VERTEXELEMENTFORMAT_HALF2:  return 4;
+            case SDL_GPU_VERTEXELEMENTFORMAT_HALF4:  return 8;
             default: return 0;
         }
     }
@@ -18,13 +30,13 @@ std::optional<std::vector<u32>> CompileShader(const std::string& path, EShLangua
     // Initialize glslang on first call of CompileShader()
     static const bool glslang_initialized = glslang::InitializeProcess();
     if (!glslang_initialized) {
-        std::cerr << "Failed to initialize glslang" << std::endl;
+        LogError("Failed to initialize glslang");
         return std::nullopt;
     }
 
     std::optional<std::string> source = ReadFile(path);
     if (!source) {
-        std::cerr << "Failed to read shader file: " << path << std::endl;
+        LogError("Failed to read shader file: {}", path);
         return std::nullopt;
     }
     const char* c_source = source->c_str();
@@ -54,9 +66,7 @@ std::optional<std::vector<u32>> CompileShader(const std::string& path, EShLangua
             case EShLangCompute: stage_str = "Compute"; break;
             default: stage_str = "Unknown"; break;
         }
-        std::cerr << "GLSL Compilation Failed (" << stage_str << "):\n"
-            << shader.getInfoLog() << "\n"
-            << shader.getInfoDebugLog() << std::endl;
+        LogError("GLSL Compilation Failed ({}):\n{}\n{}", stage_str, shader.getInfoLog(), shader.getInfoDebugLog());
         return std::nullopt;
     }
 
@@ -64,9 +74,7 @@ std::optional<std::vector<u32>> CompileShader(const std::string& path, EShLangua
     program.addShader(&shader);
 
     if (!program.link(messages)) {
-        std::cerr << "GLSL Linking Failed:\n"
-            << program.getInfoLog() << "\n"
-            << program.getInfoDebugLog() << std::endl;
+        LogError("GLSL Linking Failed:\n{}\n{}", program.getInfoLog(), program.getInfoDebugLog());
         return std::nullopt;
     }
 
@@ -78,7 +86,7 @@ std::optional<std::vector<u32>> CompileShader(const std::string& path, EShLangua
 
 std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code) {
     if (spirv_code.empty()) {
-        std::cerr << "Cannot reflect! Empty SPIRV code vector\n";
+        LogError("Cannot reflect! Empty SPIRV code vector");
         return std::nullopt;
     }
 
@@ -86,7 +94,7 @@ std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code) {
     SpvReflectResult result = spvReflectCreateShaderModule(
         spirv_code.size_bytes(), spirv_code.data(), &module);
     if (result != SPV_REFLECT_RESULT_SUCCESS) {
-        std::cerr << "Reflection failed! SpvReflect error " << result << "\n";
+        LogError("Reflection failed! SpvReflect error {}", static_cast<int>(result));
         return std::nullopt;
     }
 
@@ -130,9 +138,24 @@ std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code) {
 
     const auto ToVertexElementFormat = [](SpvReflectFormat format) {
         switch (format) {
+            case SPV_REFLECT_FORMAT_R32_SFLOAT:          return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT;
             case SPV_REFLECT_FORMAT_R32G32_SFLOAT:       return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
             case SPV_REFLECT_FORMAT_R32G32B32_SFLOAT:    return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
             case SPV_REFLECT_FORMAT_R32G32B32A32_SFLOAT: return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+
+            case SPV_REFLECT_FORMAT_R32_SINT:            return SDL_GPU_VERTEXELEMENTFORMAT_INT;
+            case SPV_REFLECT_FORMAT_R32G32_SINT:         return SDL_GPU_VERTEXELEMENTFORMAT_INT2;
+            case SPV_REFLECT_FORMAT_R32G32B32_SINT:      return SDL_GPU_VERTEXELEMENTFORMAT_INT3;
+            case SPV_REFLECT_FORMAT_R32G32B32A32_SINT:   return SDL_GPU_VERTEXELEMENTFORMAT_INT4;
+
+            case SPV_REFLECT_FORMAT_R32_UINT:            return SDL_GPU_VERTEXELEMENTFORMAT_UINT;
+            case SPV_REFLECT_FORMAT_R32G32_UINT:         return SDL_GPU_VERTEXELEMENTFORMAT_UINT2;
+            case SPV_REFLECT_FORMAT_R32G32B32_UINT:      return SDL_GPU_VERTEXELEMENTFORMAT_UINT3;
+            case SPV_REFLECT_FORMAT_R32G32B32A32_UINT:   return SDL_GPU_VERTEXELEMENTFORMAT_UINT4;
+
+            case SPV_REFLECT_FORMAT_R16G16_SFLOAT:       return SDL_GPU_VERTEXELEMENTFORMAT_HALF2;
+            case SPV_REFLECT_FORMAT_R16G16B16A16_SFLOAT: return SDL_GPU_VERTEXELEMENTFORMAT_HALF4;
+
             default:                                     return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
         }
     };
@@ -155,8 +178,7 @@ std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code) {
 
             SDL_GPUVertexElementFormat format = ToVertexElementFormat(variable.format);
             if (format == SDL_GPU_VERTEXELEMENTFORMAT_INVALID) {
-                std::cerr << "Unsupported vertex input format at location "
-                    << variable.location << "\n";
+                LogError("Unsupported vertex input format at location {}", variable.location);
                 unsupported_format = true;
                 break;
             }
@@ -176,13 +198,20 @@ std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code) {
 
     u32 offset = 0;
     for (const ReflectedAttribute& attribute : attributes) {
+        u32 size = VertexElementFormatSize(attribute.format);
+        if (size == 0) {
+            LogError("No vertex element size for format at location {}", attribute.location);
+            spvReflectDestroyShaderModule(&module);
+            return std::nullopt;
+        }
+
         data.vertex_attributes.push_back({
             .location    = attribute.location,
             .buffer_slot = 0,
             .format      = attribute.format,
             .offset      = offset,
         });
-        offset += VertexElementFormatSize(attribute.format);
+        offset += size;
     }
 
     spvReflectDestroyShaderModule(&module);
@@ -192,7 +221,7 @@ std::optional<ReflectionData> ReflectShader(std::span<u32> spirv_code) {
 std::optional<Window> CreateWindow(const std::string& title, int w, int h) {
     auto window = SDL_CreateWindow(title.c_str(), w, h, SDL_WINDOW_RESIZABLE);
     if (window == nullptr) {
-        std::cerr << "Failed to create window: " << SDL_GetError() << std::endl;
+        LogError("Failed to create window: {}", SDL_GetError());
         return std::nullopt;
     }
     return Window(window);
@@ -201,7 +230,7 @@ std::optional<Window> CreateWindow(const std::string& title, int w, int h) {
 std::optional<GPUDevice> CreateGPUDevice() {
     auto device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, FL_DEBUG, nullptr);
     if (device == nullptr) {
-        std::cerr << "Failed to create GPU device: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU device: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUDevice(device);
@@ -210,7 +239,7 @@ std::optional<GPUDevice> CreateGPUDevice() {
 std::optional<GPUBuffer> CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBufferCreateInfo& create_info) {
     auto buffer = SDL_CreateGPUBuffer(device, &create_info);
     if (buffer == nullptr) {
-        std::cerr << "Failed to create GPU buffer: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU buffer: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUBuffer(buffer, ResourceDeleter{ device });
@@ -219,7 +248,7 @@ std::optional<GPUBuffer> CreateGPUBuffer(SDL_GPUDevice* device, const SDL_GPUBuf
 std::optional<GPUComputePipeline> CreateGPUComputePipeline(SDL_GPUDevice* device, const SDL_GPUComputePipelineCreateInfo& create_info) {
     auto pipeline = SDL_CreateGPUComputePipeline(device, &create_info);
     if (pipeline == nullptr) {
-        std::cerr << "Failed to create GPU compute pipeline: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU compute pipeline: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUComputePipeline(pipeline, ResourceDeleter{ device });
@@ -270,7 +299,7 @@ std::optional<GPUComputePipeline> CreateGPUComputePipeline(
 std::optional<GPUGraphicsPipeline> CreateGPUGraphicsPipeline(SDL_GPUDevice* device, const SDL_GPUGraphicsPipelineCreateInfo& create_info) {
     auto pipeline = SDL_CreateGPUGraphicsPipeline(device, &create_info);
     if (pipeline == nullptr) {
-        std::cerr << "Failed to create GPU graphics pipeline: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU graphics pipeline: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUGraphicsPipeline(pipeline, ResourceDeleter{ device });
@@ -279,7 +308,7 @@ std::optional<GPUGraphicsPipeline> CreateGPUGraphicsPipeline(SDL_GPUDevice* devi
 std::optional<GPUShader> CreateGPUShader(SDL_GPUDevice* device, const SDL_GPUShaderCreateInfo& create_info, const ShaderDefineVector& defines) {
     auto shader = SDL_CreateGPUShader(device, &create_info);
     if (shader == nullptr) {
-        std::cerr << "Failed to create GPU shader: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU shader: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUShader(shader, ResourceDeleter{ device });
@@ -301,42 +330,9 @@ std::optional<GPUShader> CreateGPUShader(
         return CreateGPUShaderFragment(device, path, reflection);
     }
     else {
-        std::cerr << "Cannot deduce shader type from this extension: " << path << std::endl;
+        LogError("Cannot deduce shader type from this extension: {}", path);
         return std::nullopt;
     }
-
-    std::optional<std::vector<u32>> code = CompileShader(path, glslang_stage, defines);
-    if (!code) {
-        return std::nullopt;
-    }
-
-    std::optional<ReflectionData> data = ReflectShader(*code);
-    if (!data) {
-        return std::nullopt;
-    }
-
-    SDL_GPUShaderCreateInfo create_info = {
-        .code_size            = code->size() * sizeof(u32),
-        .code                 = reinterpret_cast<const Uint8*>(code->data()),
-        .entrypoint           = "main",
-        .format               = SDL_GPU_SHADERFORMAT_SPIRV,
-        .stage                = sdl_stage,
-        .num_samplers         = data->num_samplers,
-        .num_storage_textures = data->num_readonly_storage_textures + data->num_readwrite_storage_textures,
-        .num_storage_buffers  = data->num_readonly_storage_buffers + data->num_readwrite_storage_buffers,
-        .num_uniform_buffers  = data->num_uniform_buffers,
-    };
-
-    std::optional<GPUShader> shader = CreateGPUShader(device, create_info);
-    if (!shader) {
-        return std::nullopt;
-    }
-
-    if (reflection) {
-        *reflection = *data;
-    }
-
-    return shader;
 }
 
 std::optional<GPUShader> CreateGPUShaderVertex(SDL_GPUDevice* device, const std::string& path, ReflectionData* reflection) {
@@ -412,7 +408,7 @@ std::optional<GPUShader> CreateGPUShaderFragment(SDL_GPUDevice* device, const st
 std::optional<GPUTexture> CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info) {
     auto texture = SDL_CreateGPUTexture(device, &create_info);
     if (texture == nullptr) {
-        std::cerr << "Failed to create GPU texture: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU texture: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUTexture(texture, ResourceDeleter{ device });
@@ -421,7 +417,7 @@ std::optional<GPUTexture> CreateGPUTexture(SDL_GPUDevice* device, const SDL_GPUT
 std::optional<GPUTransferBuffer> CreateGPUTransferBuffer(SDL_GPUDevice* device, const SDL_GPUTransferBufferCreateInfo& create_info) {
     auto transfer_buffer = SDL_CreateGPUTransferBuffer(device, &create_info);
     if (transfer_buffer == nullptr) {
-        std::cerr << "Failed to create GPU transfer buffer: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU transfer buffer: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUTransferBuffer(transfer_buffer, ResourceDeleter{ device });
@@ -430,34 +426,47 @@ std::optional<GPUTransferBuffer> CreateGPUTransferBuffer(SDL_GPUDevice* device, 
 std::optional<GPUSampler> CreateGPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& create_info) {
     auto sampler = SDL_CreateGPUSampler(device, &create_info);
     if (sampler == nullptr) {
-        std::cerr << "Failed to create GPU sampler: " << SDL_GetError() << std::endl;
+        LogError("Failed to create GPU sampler: {}", SDL_GetError());
         return std::nullopt;
     }
     return GPUSampler(sampler, ResourceDeleter{ device });
 }
 
-GPUComputePipelineEx::GPUComputePipelineEx(
+std::optional<GPUComputePipelineEx> GPUComputePipelineEx::Create(
     SDL_GPUDevice* device,
     const std::string& path,
     const ShaderDefineVector& defines
-) :
-    m_path(path),
-    m_last_write_time(std::filesystem::last_write_time(path)),
-    m_defines(defines)
-{
-    m_pipeline.get_deleter().device = device;
-    RebuildPipeline();
+) {
+    GPUComputePipelineEx pipeline;
+    pipeline.m_path = path;
+    pipeline.SetDevice(device);
+
+    std::error_code ec;
+    pipeline.m_last_write_time = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        LogError("Failed to stat shader file {}: {}", path, ec.message());
+        return std::nullopt;
+    }
+
+    pipeline.m_defines = defines;
+    if (!pipeline.RebuildPipeline()) {
+        return std::nullopt;
+    }
+    return pipeline;
 }
 
-void GPUComputePipelineEx::ReloadIfModified() {
-    auto current = std::filesystem::last_write_time(m_path);
+bool GPUComputePipelineEx::ReloadIfModified() {
+    std::error_code ec;
+    auto current = std::filesystem::last_write_time(m_path, ec);
+    if (ec) {
+        return false;
+    }
     if (current == m_last_write_time) {
-        return;
+        return true;
     }
 
-    if (RebuildPipeline()) {
-        m_last_write_time = current;
-    }
+    m_last_write_time = current;
+    return RebuildPipeline();
 }
 
 void GPUComputePipelineEx::SetBindings(
@@ -467,16 +476,20 @@ void GPUComputePipelineEx::SetBindings(
     m_buffer_bindings.assign(buffers.begin(), buffers.end());
 }
 
-void GPUComputePipelineEx::SetDefines(ShaderDefineVector defines) {
+bool GPUComputePipelineEx::SetDefines(ShaderDefineVector defines, bool rebuild) {
     m_defines = defines;
+    if (rebuild) {
+        return RebuildPipeline();
+    }
+    return true;
 }
 
 void GPUComputePipelineEx::DispatchAsPass(
     SDL_GPUCommandBuffer* command_buffer,
     u32 work_x, u32 work_y, u32 work_z
 ) const {
-    if (!m_pipeline) {
-        std::cerr << "Cannot dispatch compute pass: pipeline is null" << std::endl;
+    if (!IsValid()) {
+        LogError("Cannot dispatch compute pass: pipeline is null");
         return;
     }
 
@@ -485,7 +498,7 @@ void GPUComputePipelineEx::DispatchAsPass(
         m_texture_bindings.data(), static_cast<Uint32>(m_texture_bindings.size()),
         m_buffer_bindings.data(), static_cast<Uint32>(m_buffer_bindings.size())
     );
-    SDL_BindGPUComputePipeline(compute_pass, m_pipeline.get());
+    SDL_BindGPUComputePipeline(compute_pass, Get());
 
     u32 groupcount_x = (work_x + m_thread_count_x - 1) / m_thread_count_x;
     u32 groupcount_y = (work_y + m_thread_count_y - 1) / m_thread_count_y;
@@ -495,20 +508,16 @@ void GPUComputePipelineEx::DispatchAsPass(
     SDL_EndGPUComputePass(compute_pass);
 }
 
-GPUComputePipelineEx CreateGPUComputePipelineEx(SDL_GPUDevice* device, const std::string& path) {
-    return GPUComputePipelineEx(device, path);
-}
-
 bool GPUComputePipelineEx::RebuildPipeline() {
-    ReflectionData reflection;
+    ReflectionData reflection{};
     std::optional<GPUComputePipeline> new_pipeline = CreateGPUComputePipeline(
-        m_pipeline.get_deleter().device, m_path, m_defines, &reflection);
+        Device(), m_path, m_defines, &reflection);
 
     if (!new_pipeline) {
         return false;
     }
 
-    m_pipeline = std::move(*new_pipeline);
+    Set(std::move(*new_pipeline));
 
     m_thread_count_x = reflection.threadcount_x;
     m_thread_count_y = reflection.threadcount_y;
@@ -517,37 +526,48 @@ bool GPUComputePipelineEx::RebuildPipeline() {
     return true;
 }
 
-GPUGraphicsPipelineEx::GPUGraphicsPipelineEx(
+std::optional<GPUGraphicsPipelineEx> GPUGraphicsPipelineEx::Create(
     SDL_GPUDevice* device,
     const std::string& path,
     const SDL_GPUGraphicsPipelineCreateInfo& create_info
-) :
-    m_path(path),
-    m_last_write_time(std::filesystem::last_write_time(path)),
-    m_create_info(create_info)
-{
-    m_pipeline.get_deleter().device = device;
+) {
+    GPUGraphicsPipelineEx pipeline;
+    pipeline.m_path = path;
+
+    std::error_code ec;
+    pipeline.m_last_write_time = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        LogError("Failed to stat shader file {}: {}", path, ec.message());
+        return std::nullopt;
+    }
+
+    pipeline.m_create_info = create_info;
+
+    pipeline.SetDevice(device);
 
     if (create_info.target_info.num_color_targets > 0 && create_info.target_info.color_target_descriptions != nullptr) {
-        m_color_targets.assign(
+        pipeline.m_color_targets.assign(
             create_info.target_info.color_target_descriptions,
             create_info.target_info.color_target_descriptions + create_info.target_info.num_color_targets
         );
     }
-    m_create_info.target_info.color_target_descriptions =
-        m_color_targets.empty() ? nullptr : m_color_targets.data();
+    pipeline.m_create_info.target_info.color_target_descriptions =
+        pipeline.m_color_targets.empty() ? nullptr : pipeline.m_color_targets.data();
 
-    RebuildPipeline();
+    if (!pipeline.RebuildPipeline()) {
+        return std::nullopt;
+    }
+    return pipeline;
 }
 
 bool GPUGraphicsPipelineEx::RebuildPipeline() {
-    ReflectionData vs_refl;
-    std::optional<GPUShader> vs = CreateGPUShaderVertex(m_pipeline.get_deleter().device, m_path, &vs_refl);
+    ReflectionData vs_refl{};
+    std::optional<GPUShader> vs = CreateGPUShaderVertex(Device(), m_path, &vs_refl);
     if (!vs) {
         return false;
     }
 
-    std::optional<GPUShader> fs = CreateGPUShaderFragment(m_pipeline.get_deleter().device, m_path);
+    std::optional<GPUShader> fs = CreateGPUShaderFragment(Device(), m_path);
     if (!fs) {
         return false;
     }
@@ -582,68 +602,102 @@ bool GPUGraphicsPipelineEx::RebuildPipeline() {
     };
 
     std::optional<GPUGraphicsPipeline> new_pipeline = CreateGPUGraphicsPipeline(
-        m_pipeline.get_deleter().device, m_create_info);
+        Device(), m_create_info);
     if (!new_pipeline) {
+        m_create_info.vertex_shader = nullptr;
+        m_create_info.fragment_shader = nullptr;
+        m_create_info.vertex_input_state.vertex_attributes = nullptr;
         return false;
     }
 
-    m_pipeline = std::move(*new_pipeline);
+    m_create_info.vertex_shader = nullptr;
+    m_create_info.fragment_shader = nullptr;
+    m_create_info.vertex_input_state.vertex_attributes = nullptr;
+    Set(std::move(*new_pipeline));
 
     return true;
 }
 
-void GPUGraphicsPipelineEx::ReloadIfModified() {
-    auto current = std::filesystem::last_write_time(m_path);
+bool GPUGraphicsPipelineEx::ReloadIfModified() {
+    std::error_code ec;
+    auto current = std::filesystem::last_write_time(m_path, ec);
+    if (ec) {
+        return false;
+    }
     if (current == m_last_write_time) {
-        return;
+        return true;
     }
+
     m_last_write_time = current;
-
-    RebuildPipeline();
+    return RebuildPipeline();
 }
 
-GPUTextureEx::GPUTextureEx(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info) {
+std::optional<GPUTextureEx> GPUTextureEx::Create(SDL_GPUDevice* device, const SDL_GPUTextureCreateInfo& create_info) {
+    GPUTextureEx texture_ex;
     std::optional<GPUTexture> texture = CreateGPUTexture(device, create_info);
-    if (texture) {
-        m_texture = std::move(*texture);
+    if (!texture) {
+        return std::nullopt;
     }
+
+    texture_ex.SetDevice(device);
+    texture_ex.Set(std::move(*texture));
+    texture_ex.m_create_info = create_info;
+    return texture_ex;
+}
+
+bool GPUTextureEx::Recreate(u32 width, u32 height, u32 depth) {
+    if (width == 0 || height == 0 || depth == 0) {
+        LogError("Cannot create texture with dimensions {}x{}x{}", width, height, depth);
+        return false;
+    }
+    if (Device() == nullptr) {
+        LogError("Cannot recreate texture without a GPU device");
+        return false;
+    }
+
+    SDL_GPUTextureCreateInfo create_info = m_create_info;
+    create_info.width                = width;
+    create_info.height               = height;
+    create_info.layer_count_or_depth = depth;
+
+    std::optional<GPUTexture> new_texture = CreateGPUTexture(Device(), create_info);
+    if (!new_texture) {
+        return false;
+    }
+
+    Set(std::move(*new_texture));
     m_create_info = create_info;
+    return true;
 }
 
-void GPUTextureEx::EnsureSize(u32 width, u32 height, u32 depth) {
+bool GPUTextureEx::EnsureSize(u32 width, u32 height, u32 depth) {
     if (
-        !m_texture ||
-        m_create_info.width < width ||
-        m_create_info.height < height ||
-        m_create_info.layer_count_or_depth < depth
+        IsValid() &&
+        m_create_info.width >= width &&
+        m_create_info.height >= height &&
+        m_create_info.layer_count_or_depth >= depth
     ) {
-        m_create_info.width                = width;
-        m_create_info.height               = height;
-        m_create_info.layer_count_or_depth = depth;
-
-        std::optional<GPUTexture> new_texture = CreateGPUTexture(m_texture.get_deleter().device, m_create_info);
-        if (new_texture) {
-            m_texture = std::move(*new_texture);
-        }
+        return true;
     }
+
+    return Recreate(
+        std::max(m_create_info.width, width),
+        std::max(m_create_info.height, height),
+        std::max(m_create_info.layer_count_or_depth, depth)
+    );
 }
 
-void GPUTextureEx::Resize(u32 width, u32 height, u32 depth) {
+bool GPUTextureEx::Resize(u32 width, u32 height, u32 depth) {
     if (
-        !m_texture ||
-        m_create_info.width != width ||
-        m_create_info.height != height ||
-        m_create_info.layer_count_or_depth != depth
+        IsValid() &&
+        m_create_info.width == width &&
+        m_create_info.height == height &&
+        m_create_info.layer_count_or_depth == depth
     ) {
-        m_create_info.width                = width;
-        m_create_info.height               = height;
-        m_create_info.layer_count_or_depth = depth;
-
-        std::optional<GPUTexture> new_texture = CreateGPUTexture(m_texture.get_deleter().device, m_create_info);
-        if (new_texture) {
-            m_texture = std::move(*new_texture);
-        }
+        return true;
     }
+
+    return Recreate(width, height, depth);
 }
 
 ImGuiHelper::ImGuiHelper(SDL_GPUDevice* device, SDL_Window* window) :
@@ -695,10 +749,6 @@ void ImGuiHelper::DispatchRenderPass(SDL_GPUCommandBuffer* command_buffer, SDL_G
 
 void ImGuiHelper::ControlPanelAndScene(GPUTextureEx& scene_texture, std::function<void()> control_panel, bool* scene_is_focused) {
     NewFrame();
-    ImGuiWindowFlags window_flags =
-        ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoScrollWithMouse;
-    window_flags = 0;
 
     ImGui::DockSpaceOverViewport(
         0,
@@ -706,13 +756,13 @@ void ImGuiHelper::ControlPanelAndScene(GPUTextureEx& scene_texture, std::functio
         ImGuiDockNodeFlags_PassthruCentralNode
     );
 
-    ImGui::Begin("Control Panel", nullptr, window_flags);
+    ImGui::Begin("Control Panel", nullptr, 0);
     control_panel();
     ImGui::End();
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("Simulation", nullptr, window_flags);
+    ImGui::Begin("Simulation", nullptr, 0);
 
     if (scene_is_focused) {
         *scene_is_focused = ImGui::IsWindowHovered();
